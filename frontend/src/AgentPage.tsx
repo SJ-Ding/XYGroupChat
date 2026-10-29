@@ -10,6 +10,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { api, base, post } from "./api";
+import type { MemoryStatus } from "./types";
 
 type Execution = {
   key: string;
@@ -69,6 +70,7 @@ type Status = {
   skills: { name: string; description: string; writes: boolean }[];
   tool_runs: { key: string; name: string; at: number; result: string }[];
   reminders: { key: string; content: string; at: number }[];
+  memory_status?: MemoryStatus;
 };
 const labels: Record<string, string> = {
   pending: "排队中",
@@ -175,7 +177,7 @@ export default function AgentPage({
           </span>
           <div>
             <h1>Agent 运行状态</h1>
-            <p>{data?.name || "小忆"} · 家庭助手</p>
+            <p>{data?.name || "小艺"} · 陪伴型管家</p>
           </div>
         </div>
         <div>
@@ -295,6 +297,7 @@ export default function AgentPage({
                 ["demands", "主动跟进"],
                 ["logs", "决策记录"],
                 ["skills", "Skill 与提醒"],
+                ["memory", "记忆整理"],
               ].map(([key, label]) => (
                 <button
                   key={key}
@@ -348,6 +351,47 @@ export default function AgentPage({
                     </footer>
                   </article>
                 ))}
+              </section>
+            )}
+            {tab === "memory" && (
+              <section className="monitor-section">
+                <h2>小艺记着的近况</h2>
+                <p className="field-help">
+                  聊天中的近期安排会先存为短期记忆，变更或完成后更新；反复得到支持的稳定偏好才会转为长期。整理在本地完成，不会往群里发总结。
+                </p>
+                <div className="monitor-health">
+                  <div>
+                    <strong>当前有效记忆</strong>
+                    <p>
+                      今天 {data.memory_status?.working ?? 0} · 短期{" "}
+                      {data.memory_status?.short ?? 0} · 长期{" "}
+                      {data.memory_status?.long ?? 0}
+                    </p>
+                  </div>
+                  <div>
+                    <strong>最近整理</strong>
+                    <p>
+                      {stamp(data.memory_status?.maintenance?.last_run ?? null)}
+                    </p>
+                    <small>
+                      {data.memory_status?.maintenance?.dirty
+                        ? "有新近况等待复核"
+                        : "按计划整理"}{" "}
+                      · 下次{" "}
+                      {stamp(data.memory_status?.maintenance?.next_due ?? null)}
+                    </small>
+                  </div>
+                  <div>
+                    <strong>上次整理结果</strong>
+                    <p>
+                      转长期{" "}
+                      {data.memory_status?.maintenance?.counts.promoted ?? 0} ·
+                      过期归档{" "}
+                      {data.memory_status?.maintenance?.counts.expired ?? 0} ·
+                      合并 {data.memory_status?.maintenance?.counts.merged ?? 0}
+                    </p>
+                  </div>
+                </div>
               </section>
             )}
             {tab === "demands" && (

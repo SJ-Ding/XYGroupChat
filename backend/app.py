@@ -48,7 +48,7 @@ async def lifespan(app):
     await agent.close()
     await asyncio.gather(task, return_exceptions=True)
 
-app = FastAPI(title='小忆 · 家庭聊天', lifespan=lifespan)
+app = FastAPI(title='小艺 · 家庭聊天', lifespan=lifespan)
 
 def identity(username):
     if username not in ('dad', 'mom', 'child'):
@@ -283,6 +283,9 @@ class SettingsBody(BaseModel):
     context_budget: int = Field(default=24000, ge=4000, le=64000)
     care_group_limit: int = Field(default=1, ge=0, le=10)
     participation_shadow: bool = False
+    memory_auto: bool = True
+    memory_short_days: int = Field(default=7, ge=1, le=30)
+    memory_review_seconds: int = Field(default=21600, ge=3600, le=604800)
 
 @app.get('/api/groups/{gid}/settings')
 def settings(gid: int, user=Depends(current)):
@@ -297,6 +300,13 @@ async def update_settings(gid: int, body: SettingsBody, user=Depends(current)):
         old = get(db, 'group', gid, 'settings').data
         d = {**old, **body.model_dump(), 'version': old['version']+1}
         put(db, 'group', gid, 'settings', d)
+        if old.get('memory_review_seconds',21600) != d['memory_review_seconds']:
+            maintenance=get(db,'memory_maintenance',gid,'latest')
+            if maintenance:
+                state=maintenance.data
+                # New cadence applies immediately; do not postpone dirty work.
+                due=time.time()+d['memory_review_seconds']
+                maintenance.set({**state,'next_due':min(state['next_due'],due) if state.get('dirty') else due})
         # Invalidate existing candidates; new settings apply to subsequent needs.
         for r in records(db, 'demand', gid):
             if r.data['status'] == 'waiting':

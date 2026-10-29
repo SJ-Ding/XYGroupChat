@@ -20,6 +20,22 @@ export type Memory = {
   sources: number[];
   manual: boolean;
   updated: number;
+  lifetime?: "working" | "short" | "long";
+  expires_at?: number | null;
+  tentative?: boolean;
+};
+export type MemoryStatus = {
+  active: number;
+  working: number;
+  short: number;
+  long: number;
+  maintenance: {
+    last_run: number | null;
+    next_due: number;
+    runs: number;
+    dirty: boolean;
+    counts: Record<string, number>;
+  } | null;
 };
 export type Task = {
   key: string;
@@ -39,6 +55,9 @@ export type Config = {
   context_budget?: number;
   care_group_limit?: number;
   participation_shadow?: boolean;
+  memory_auto?: boolean;
+  memory_short_days?: number;
+  memory_review_seconds?: number;
 };
 export type Activity = {
   logs: { reason: string; at: number; source: number }[];

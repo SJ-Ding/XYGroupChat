@@ -40,7 +40,7 @@ def test_monitor_endpoint_requires_valid_group_member():
         assert client.get('/api/groups/2/agent/status?user=dad').status_code==403
         result=client.get('/api/groups/1/agent/status?user=dad')
         assert result.status_code==200
-        assert result.json()['name']=='小忆'
+        assert result.json()['name']=='小艺'
 
 @pytest.mark.asyncio
 async def test_live_candidate_phase_is_removed_after_generation():

@@ -99,7 +99,7 @@ register(Skill('remember', '仅当用户明确要求记住信息时，保存家�
 register(Skill('family_tasks', '列出待办；仅在用户明确要求时创建或完成待办。due 使用 Unix 秒时间戳。', schema({'action': {'enum': ['list', 'create', 'complete']}, 'key': {'type': 'string'}, 'title': {'type': 'string', 'maxLength': 500}, 'owner_id': {'type': ['integer', 'null']}, 'due': {'type': ['number', 'null']}}, ['action']), tasks, True))
 register(Skill('group_reminder', '仅在用户明确要求时，创建一次性群内提醒。at 为 Unix 秒时间戳。', schema({'content': {'type': 'string', 'maxLength': 2000}, 'at': {'type': 'number'}}, ['content', 'at']), remind, True))
 
-REGISTRY['memory_search'].instructions = '先检索当前空间，只引用命中的来源；找不到时明确说明，不编造记忆。'
+REGISTRY['memory_search'].instructions = '先检索当前空间，自然使用命中的相关事实和近况，留意短期有效期和未确定的打算。找不到就坦诚说，不编造。不要抄录工具结果或逐条汇报确认状态；只有被问到出处时才解释来源。'
 REGISTRY['remember'].instructions = '保存明确要求记住的完整事实，保留否定条件。不可修改授权参数或改变可见空间。'
 REGISTRY['family_tasks'].instructions = '先区分查看、创建和完成。完成使用已有待办编号；每项写入必须精确匹配授权。结果中有 error 时不得宣称完成。'
 REGISTRY['group_reminder'].instructions = '核对明确约定的内容和未来时间。周期、用药和接收对象通过提醒表单设置；不自行推断剂量和疗程。'

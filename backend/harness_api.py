@@ -14,6 +14,7 @@ from .proactive import next_occurrence, feedback
 from .orchestration import create_run
 from .governance import metrics
 from .skills import REGISTRY
+from .memory_lifecycle import status as memory_status
 
 
 class LoginBody(BaseModel):
@@ -220,7 +221,7 @@ def router(agent):
                 'jobs': [{'key': r.key, 'source': r.data['source'], 'status': r.data['status'], 'error': r.data.get('error'), 'action_status': r.data.get('action_status')}
                          for r in records(db, 'job', ns) if ns < 0 and r.data['status'] in ('failed', 'reply_failed')],
                 'preferences': pref.data if pref else {'timezone': 'Asia/Shanghai', 'quiet_start': None, 'quiet_end': None, 'care_limit': 1},
-                'metrics': metrics(db, ns)}
+                'metrics': metrics(db, ns), 'memory_status': memory_status(db,ns,time.time())}
 
     @api.get('/api/harness/{scope}/memories')
     def memories(scope: str, gid: int = 1, q: str = '', user=Depends(authenticated)):

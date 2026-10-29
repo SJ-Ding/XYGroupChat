@@ -38,7 +38,7 @@ def message(text, gid=1, user_id=1):
     ('discussion','group',.99,False,'silent'), ('joke','agent',.99,True,'silent'),
     ('emotional','group',.99,False,'silent'), ('request','member',.5,True,'silent'),
     ('request','member',.99,False,'silent'), ('request','member',.95,True,'observe'),
-    ('request','agent',.95,True,'reply'),
+    ('request','agent',.95,True,'observe'),
 ])
 async def test_understanding_does_not_automatically_trigger_participation(kind,target,confidence,helpful,expected):
     model = FakeModel({'intent': {'kind':kind,'target':target,'topic':'晚餐','confidence':confidence,'assistant_helpful':helpful},

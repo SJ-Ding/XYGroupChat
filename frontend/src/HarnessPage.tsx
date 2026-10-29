@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, LockKeyhole, RefreshCw } from "lucide-react";
 import { api, post, clientId } from "./api";
 import Login from "./Login";
+import type { MemoryStatus } from "./types";
 
 type Memory = {
   key: string;
@@ -11,6 +12,8 @@ type Memory = {
   subjects: string[];
   expires_at: number | null;
   sources: number[];
+  tentative?: boolean;
+  category?: string;
 };
 type Step = {
   tool: string;
@@ -71,6 +74,7 @@ type Preferences = {
 };
 type State = {
   memories: Memory[];
+  memory_status?: MemoryStatus;
   conflicts: {
     key: string;
     memory_key: string;
@@ -482,7 +486,7 @@ export default function HarnessPage({ onBack }: { onBack: () => void }) {
                     ))}
                     {scope === "personal" && (
                       <>
-                        <h2>与小忆聊聊</h2>
+                        <h2>与小艺聊聊</h2>
                         <p className="field-help">
                           私人会话不会发送到家庭群。可以询问个人记忆，或明确说“记住……”。
                         </p>
@@ -496,7 +500,7 @@ export default function HarnessPage({ onBack }: { onBack: () => void }) {
                               key={m.id}
                             >
                               <small>
-                                {m.user_id ? "我" : "小忆"} · {stamp(m.created)}
+                                {m.user_id ? "我" : "小艺"} · {stamp(m.created)}
                               </small>
                               <p>{m.content}</p>
                             </article>
@@ -535,7 +539,7 @@ export default function HarnessPage({ onBack }: { onBack: () => void }) {
                             className="primary"
                             disabled={busy || !draft.trim()}
                           >
-                            发送给小忆
+                            发送给小艺
                           </button>
                         </form>
                         {data.jobs?.map((j) => (
@@ -664,6 +668,13 @@ export default function HarnessPage({ onBack }: { onBack: () => void }) {
                     </div>
                     <div>
                       <h2>当前有效记忆</h2>
+                      <p className="field-help">
+                        近期安排先记几天，稳定偏好慢慢记牢。
+                        {data.memory_status?.maintenance?.last_run
+                          ? "最近整理：" +
+                            stamp(data.memory_status.maintenance.last_run)
+                          : "后台会定期复核、合并和更新。"}
+                      </p>
                       {!data.memories.length && <p>暂无有效记忆</p>}
                       {data.memories.map((m) => (
                         <article className="harness-card" key={m.key}>
@@ -682,6 +693,9 @@ export default function HarnessPage({ onBack }: { onBack: () => void }) {
                               : ""}
                           </small>
                           <p>{m.content}</p>
+                          {m.tentative && (
+                            <small>这还是一个打算，尚未确定。</small>
+                          )}
                           <div className="harness-actions">
                             <button
                               className="secondary"
@@ -808,7 +822,7 @@ export default function HarnessPage({ onBack }: { onBack: () => void }) {
                                 })
                               }
                             >
-                              让小忆规划步骤
+                              让小艺规划步骤
                             </button>
                             <p className="field-help">
                               仅将上方填写的目标发送给已配置模型。生成的步骤需审核授权后才执行，也可手动填写。

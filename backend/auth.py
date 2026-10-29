@@ -4,6 +4,7 @@ import secrets
 import time
 from fastapi import HTTPException, Request
 from .db import DB, User, Session, get, put, password_hash, password_ok
+from .persona import DEFAULT_AGENT_NAME
 
 COOKIE = 'xiaoyi_session'
 SESSION_SECONDS = 7 * 86400
@@ -56,9 +57,10 @@ def login(username, password, address):
         # A separate namespace prevents private data appearing in any group API.
         from .db import DEFAULT_PROMPT
         if not get(db, 'group', -u.id, 'settings'):
-            put(db, 'group', -u.id, 'settings', {'name': '个人空间', 'agent_name': '小忆',
+            put(db, 'group', -u.id, 'settings', {'name': '个人空间', 'agent_name': DEFAULT_AGENT_NAME,
                 'prompt': DEFAULT_PROMPT + ' 当前是仅本人可见的个人会话，不向家庭群传播私人信息。',
-                'active': False, 'wait_seconds': 30, 'version': 1})
+                'active': False, 'wait_seconds': 30, 'version': 1,
+                'memory_auto': True, 'memory_short_days': 7, 'memory_review_seconds': 21600})
         db.commit()
         return token, {'id': u.id, 'name': u.name, 'username': u.username, 'authenticated': True}
 

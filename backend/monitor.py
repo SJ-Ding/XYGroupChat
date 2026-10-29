@@ -4,6 +4,7 @@ from collections import Counter
 from .db import DB, Message, get, records
 from .skills import REGISTRY
 from .governance import metrics
+from .memory_lifecycle import status as memory_status
 
 def snapshot(agent, gid):
     now = agent.now()
@@ -45,5 +46,6 @@ def snapshot(agent, gid):
             'tool_runs': [{'key': r.key, 'name': r.data.get('name'), 'at': r.data.get('at'), 'result': str(r.data.get('result'))[:1200]} for r in records(db, 'tool', gid)[-20:]][::-1],
             'reminders': [dict(key=r.key, **r.data) for r in records(db, 'reminder', gid) if not r.data.get('sent')][-20:],
             'metrics': metrics(db, gid),
+            'memory_status': memory_status(db,gid,now),
             'modules': ['intent', 'participation', 'memory', 'context', 'orchestration', 'skills', 'proactive', 'delivery', 'identity', 'governance'],
         }

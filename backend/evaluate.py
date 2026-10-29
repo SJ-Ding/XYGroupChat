@@ -9,6 +9,7 @@ from pathlib import Path
 from .contracts import ConversationEvent
 from .intent import direct_mention, parse_intent, recognize
 from .participation import decide
+from .persona import DEFAULT_AGENT_NAME
 
 
 async def evaluate(live=False):
@@ -23,7 +24,7 @@ async def evaluate(live=False):
         if model:
             data = await recognize(model.call, waiting=[], memories=[], names={1:'爸爸',2:'妈妈',3:'小宇'},
                 messages=[{'id':i+1,'sender':1,'text':case['text']}])
-        event = ConversationEvent(1,1,i+1,case['text'],0,direct_mention(case['text'],'小忆'))
+        event = ConversationEvent(1,1,i+1,case['text'],0,direct_mention(case['text'],DEFAULT_AGENT_NAME))
         action = decide(event,parse_intent(data),{'active':True}).action
         results.append({'id':case['id'],'expected':case['expected'],'actual':action,'passed':action==case['expected']})
     return {'mode':'live_recognition' if live else 'annotated_policy', 'cases':len(results),

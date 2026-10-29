@@ -1,4 +1,5 @@
 """Deterministic participation policy; silence is a first-class outcome."""
+import re
 from .contracts import ParticipationDecision
 
 
@@ -9,8 +10,10 @@ def decide(event, intent, settings):
         return ParticipationDecision('reply', '直接向助手发起请求', intent.topic)
     if intent.kind != 'request' or intent.confidence < .85:
         return ParticipationDecision('silent', '不是确定的求助，保持安静', intent.topic)
-    if intent.target == 'agent':
-        return ParticipationDecision('reply', '明确向助手求助', intent.topic)
+    # Model labels alone cannot turn a declarative plan update into a request.
+    # Explicit named addresses (including natural “小艺，…”) take the direct path.
+    if not re.search(r'[？?]|怎么|如何|帮我|帮忙|麻烦|请|能否|能不能|谁能|谁来|有没有',event.content):
+        return ParticipationDecision('silent', '近况陈述不触发跟进', intent.topic)
     if settings.get('active') and intent.assistant_helpful:
         return ParticipationDecision('observe', '优先等待家人回应', intent.topic)
     return ParticipationDecision('silent', '没有明确的助手帮助空间', intent.topic)

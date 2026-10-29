@@ -13,12 +13,12 @@ def tokens(value):
 
 def index(db, record):
     db.execute(text('DELETE FROM memory_fts WHERE record_id=:id'), {'id': record.id})
-    if not record.data.get('deleted'):
+    if not record.data.get('deleted') and record.data.get('status', 'active') == 'active':
         db.execute(text('INSERT INTO memory_fts VALUES (:id,:gid,:tokens)'), {'id': record.id, 'gid': record.group_id, 'tokens': tokens(record.data['content'])})
 
 def visible(data, gid, viewer_id=None, now=None):
     now = time.time() if now is None else now
-    if data.get('deleted') or (data.get('expires_at') is not None and data['expires_at'] <= now):
+    if data.get('deleted') or data.get('status', 'active') != 'active' or (data.get('expires_at') is not None and data['expires_at'] <= now):
         return False
     scope = data.get('scope', 'private' if gid < 0 else 'group')
     if scope == 'private':
@@ -32,7 +32,8 @@ def list_memories(db, gid, viewer_id=None, now=None):
 
 def save_memory(db, gid, content, sources=None, subjects=None, key=None, manual=False,
                 *, lifetime='long', expires_at=None, scope=None, owner_id=None,
-                confirmed=None, now=None, sensitive=False, explicit=False):
+                confirmed=None, now=None, sensitive=False, explicit=False,
+                metadata=None, replace_automatic=False):
     now = time.time() if now is None else now
     scope = scope or ('private' if gid < 0 else 'group')
     if not isinstance(content, str) or not content.strip() or len(content) > 2000:
@@ -59,17 +60,18 @@ def save_memory(db, gid, content, sources=None, subjects=None, key=None, manual=
     old = get(db, 'memory', gid, key) if key else None
     if old and (old.data.get('manual') or old.data.get('deleted')) and not manual:
         return old
-    if old and not manual and old.data['content'] != content:
+    if old and not manual and old.data['content'] != content and not replace_automatic:
         conflict_key = str(uuid.uuid5(uuid.NAMESPACE_URL, f'{gid}:{old.key}:{content}'))
         put(db, 'memory_conflict', gid, conflict_key, {'memory_key': old.key, 'proposed': content,
              'sources': sources, 'status': 'pending', 'at': now})
         return old
     if old:
         put(db, 'revision', gid, str(uuid.uuid4()), {'memory_key': old.key, 'previous': old.data, 'at': time.time()})
-    r = put(db, 'memory', gid, key or str(uuid.uuid4()), {'content': content, 'sources': sources, 'subjects': subjects or [], 'manual': manual, 'deleted': False, 'updated': now,
+    extra = {k:v for k,v in (metadata or {}).items() if k in ('category','topic','topic_key','subject_ids','tentative','eligible_long_term','observations','last_observed_at','first_observed_at','last_reviewed_at','promoted_at','archived_at','status','expiry_from_time')}
+    r = put(db, 'memory', gid, key or str(uuid.uuid4()), {**(old.data if old else {}), 'content': content, 'sources': sources, 'subjects': subjects or [], 'manual': manual, 'deleted': False, 'updated': now,
         'lifetime': lifetime, 'scope': scope, 'owner_id': owner_id, 'expires_at': expires_at,
         'confirmed': manual if confirmed is None else confirmed, 'sensitive': sensitive,
-        'explicit': explicit or bool(old and old.data.get('explicit'))})
+        'explicit': explicit or bool(old and old.data.get('explicit')), 'status':'active', **extra})
     if manual:
         for conflict in records(db, 'memory_conflict', gid):
             d = conflict.data

@@ -311,7 +311,7 @@ export default function Chat({
       notify((e as Error).message);
     }
   }
-  const agentName = config?.agent_name || "小忆";
+  const agentName = config?.agent_name || "小艺";
   return (
     <main className={`shell ${panel ? "with-panel" : ""}`}>
       <nav className="rail" aria-label="主导航">
@@ -371,7 +371,7 @@ export default function Chat({
       </nav>
       {view === "chat" && (
         <aside className="conversations">
-          <div className="brand compact">小忆</div>
+          <div className="brand compact">{agentName}</div>
           <div className="searchbox">
             <Search size={17} />
             <input
@@ -428,7 +428,7 @@ export default function Chat({
             <div>
               <strong>
                 {agentName}
-                <em>家庭助手</em>
+                <em>陪伴管家</em>
               </strong>
               <small>在需要时，搭把手</small>
             </div>
@@ -541,7 +541,7 @@ export default function Chat({
                   <div className="message-body">
                     <div className="message-meta">
                       <span>{m.name}</span>
-                      {m.user_id === 0 && <em>家庭助手</em>}
+                      {m.user_id === 0 && <em>陪伴管家</em>}
                       <time>{time(m.created)}</time>
                     </div>
                     <div className="bubble">
@@ -718,7 +718,9 @@ export default function Chat({
             <div className="drawer-content">
               {panel === "memory" && (
                 <>
-                  <p className="panel-intro">把家人的偏好和约定，放在心上。</p>
+                  <p className="panel-intro">
+                    最近的安排先记几天，长久的偏好慢慢记牢。你随时可以更正或删除。
+                  </p>
                   <div className="searchbox">
                     <Search size={16} />
                     <input
@@ -733,7 +735,16 @@ export default function Chat({
                       <div className="memory-card" key={m.key}>
                         <div className="card-top">
                           <BookOpen size={18} />
-                          <span>{m.manual ? "家人记录" : "聊天中记住"}</span>
+                          <span>
+                            {m.manual
+                              ? "家人记录"
+                              : m.lifetime === "working"
+                                ? "今天的近况"
+                                : m.lifetime === "short"
+                                  ? "近期记住"
+                                  : "慢慢记牢"}
+                            {m.tentative ? " · 尚未确定" : ""}
+                          </span>
                           <button
                             aria-label="编辑记忆"
                             onClick={() =>
@@ -759,6 +770,20 @@ export default function Chat({
                           </button>
                         </div>
                         <p>{m.content}</p>
+                        {m.expires_at && (
+                          <small>
+                            保留到{" "}
+                            {new Date(m.expires_at * 1000).toLocaleString(
+                              "zh-CN",
+                              {
+                                month: "numeric",
+                                day: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              },
+                            )}
+                          </small>
+                        )}
                         <div className="memory-source">
                           {m.sources.length ? (
                             m.sources.map((id) => (
@@ -870,7 +895,7 @@ export default function Chat({
                           <strong>{m.name}</strong>
                           <small>
                             {m.id === 0
-                              ? "家庭助手"
+                              ? "陪伴管家"
                               : m.online
                                 ? "在线"
                                 : "离线"}
@@ -883,7 +908,9 @@ export default function Chat({
               )}
               {panel === "settings" && config && (
                 <>
-                  <p className="panel-intro">让小忆以适合你们的方式陪伴。</p>
+                  <p className="panel-intro">
+                    让{agentName}以适合你们的方式陪伴。
+                  </p>
                   <form
                     className="settings-form"
                     onSubmit={async (e) => {
@@ -1001,6 +1028,56 @@ export default function Chat({
                         }}
                       />
                     </label>
+                    <label className="toggle-label">
+                      自动记下近期安排
+                      <input
+                        type="checkbox"
+                        checked={config.memory_auto ?? true}
+                        onChange={(e) => {
+                          settingsDirty.current = true;
+                          setConfig({
+                            ...config,
+                            memory_auto: e.target.checked,
+                          });
+                        }}
+                      />
+                    </label>
+                    <label>
+                      短期记忆默认保留（天）
+                      <input
+                        type="number"
+                        min={1}
+                        max={30}
+                        value={config.memory_short_days ?? 7}
+                        onChange={(e) => {
+                          settingsDirty.current = true;
+                          setConfig({
+                            ...config,
+                            memory_short_days: Number(e.target.value),
+                          });
+                        }}
+                      />
+                    </label>
+                    <label>
+                      定期整理间隔（小时）
+                      <input
+                        type="number"
+                        min={1}
+                        max={168}
+                        value={(config.memory_review_seconds ?? 21600) / 3600}
+                        onChange={(e) => {
+                          settingsDirty.current = true;
+                          setConfig({
+                            ...config,
+                            memory_review_seconds:
+                              Number(e.target.value) * 3600,
+                          });
+                        }}
+                      />
+                    </label>
+                    <p className="field-help">
+                      新近况会在消息分析后静默记下，约5分钟后复核；平时按间隔整理。临时感受最多记一天，稳定偏好需要多天反复支持才会转为长期记忆。
+                    </p>
                     <div className="model-info">
                       <Bot size={17} />
                       <span>
