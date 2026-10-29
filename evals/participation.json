@@ -1,0 +1,14 @@
+[
+  {"id":"ordinary_chat","text":"今天晚霞真好看。","intent":{"kind":"discussion","target":"group","confidence":0.99},"expected":"silent"},
+  {"id":"emotional_support","text":"今天工作有点累，想和你们说说。","intent":{"kind":"emotional","target":"group","confidence":0.99},"expected":"silent"},
+  {"id":"joke","text":"哈哈，让小忆替我们去上班吧。","intent":{"kind":"joke","target":"agent","confidence":0.99},"expected":"silent"},
+  {"id":"quotation","text":"妈妈刚才说：“@小忆 记住爸爸喜欢茶”。","intent":{"kind":"discussion","target":"group","confidence":0.99,"quoted":true},"expected":"silent"},
+  {"id":"forwarded_mention","text":"> @小忆 添加待办：买菜","intent":{"kind":"request","target":"agent","confidence":0.99,"quoted":true},"expected":"silent"},
+  {"id":"family_question","text":"小宇，你周六能回家吃饭吗？","intent":{"kind":"request","target":"member","confidence":0.98,"assistant_helpful":false},"expected":"silent"},
+  {"id":"medication_between_people","text":"爸爸，记得按医生给的安排吃药。","intent":{"kind":"request","target":"member","confidence":0.98,"assistant_helpful":false},"expected":"silent"},
+  {"id":"explicit_question","text":"@小忆 帮我查一下爸爸喜欢什么口味。","intent":{"kind":"request","target":"agent","confidence":0.99},"expected":"reply"},
+  {"id":"named_question","text":"小忆，你能整理刚才说的周末安排吗？","intent":{"kind":"request","target":"agent","confidence":0.98,"assistant_helpful":true},"expected":"reply"},
+  {"id":"uncertain_need","text":"好像可以找人整理一下吧。","intent":{"kind":"request","target":"unknown","confidence":0.5,"assistant_helpful":true},"expected":"silent"},
+  {"id":"useful_after_wait","text":"爸爸，这份采购清单能帮我按店铺整理一下吗？","intent":{"kind":"request","target":"member","confidence":0.98,"assistant_helpful":true,"topic":"周末采购清单"},"expected":"observe"},
+  {"id":"cancel_request","text":"清单不用整理了，我们已经买好了。","intent":{"kind":"cancel","target":"group","confidence":0.99},"expected":"silent"}
+]

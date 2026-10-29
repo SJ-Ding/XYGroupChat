@@ -24,6 +24,7 @@ import {
   Bot,
 } from "lucide-react";
 import AgentPage from "./AgentPage";
+import HarnessPage from "./HarnessPage";
 import { Avatar, Modal, Empty } from "./components";
 import { api, post, time, base, clientId, identityUrl } from "./api";
 import type {
@@ -79,13 +80,15 @@ export default function Chat({
       attachments: string[];
     } | null>(null);
   const [view, setView] = useState(() =>
-    new URLSearchParams(location.search).get("view") === "agent"
-      ? "agent"
+    ["agent", "harness"].includes(
+      new URLSearchParams(location.search).get("view") || "",
+    )
+      ? new URLSearchParams(location.search).get("view")!
       : "chat",
   );
   function navigate(next: string) {
     const url = new URL(location.href);
-    if (next === "agent") url.searchParams.set("view", "agent");
+    if (next !== "chat") url.searchParams.set("view", next);
     else url.searchParams.delete("view");
     history.pushState(null, "", url);
     setView(next);
@@ -94,8 +97,10 @@ export default function Chat({
   useEffect(() => {
     const pop = () => {
       setView(
-        new URLSearchParams(location.search).get("view") === "agent"
-          ? "agent"
+        ["agent", "harness"].includes(
+          new URLSearchParams(location.search).get("view") || "",
+        )
+          ? new URLSearchParams(location.search).get("view")!
           : "chat",
       );
       setPanel(null);
@@ -321,6 +326,7 @@ export default function Chat({
           {[
             [null, MessageCircle, "聊天"],
             ["agent", Bot, "Agent"],
+            ["harness", LockKeyhole, "个人与提醒"],
             ["memory", BookOpen, "家庭记忆"],
             ["tasks", ListTodo, "待办清单"],
             ["settings", Settings, "设置"],
@@ -332,8 +338,8 @@ export default function Chat({
                 title={label as string}
                 className={
                   (
-                    key === "agent"
-                      ? view === "agent"
+                    key === "agent" || key === "harness"
+                      ? view === key
                       : key === null
                         ? view === "chat" && panel === null
                         : panel === key
@@ -342,8 +348,8 @@ export default function Chat({
                     : ""
                 }
                 onClick={() =>
-                  key === "agent"
-                    ? navigate("agent")
+                  key === "agent" || key === "harness"
+                    ? navigate(key as string)
                     : key === null
                       ? navigate("chat")
                       : setPanel(key as Panel)
@@ -433,7 +439,9 @@ export default function Chat({
           </div>
         </aside>
       )}
-      {view === "agent" ? (
+      {view === "harness" ? (
+        <HarnessPage onBack={() => navigate("chat")} />
+      ) : view === "agent" ? (
         <AgentPage
           onBack={() => navigate("chat")}
           onSettings={() => setPanel("settings")}
@@ -553,6 +561,33 @@ export default function Chat({
                         </button>
                       ))}
                     </div>
+                    {m.user_id === 0 && user.authenticated && (
+                      <div className="harness-actions">
+                        {[
+                          ["helpful", "帮到我了"],
+                          ["over_intervention", "这次不用介入"],
+                          ["memory_incorrect", "记忆有误"],
+                        ].map(([kind, label]) => (
+                          <button
+                            className="secondary"
+                            key={kind}
+                            onClick={async () => {
+                              try {
+                                await api(
+                                  "/api/harness/group/feedback",
+                                  post({ kind, source: m.id }),
+                                );
+                                notify("反馈已记录");
+                              } catch (e) {
+                                notify((e as Error).message);
+                              }
+                            }}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </article>
               </React.Fragment>
@@ -918,8 +953,54 @@ export default function Chat({
                       />
                     </label>
                     <p className="field-help">
-                      观察期间提前生成，不发送。收到相关回应会取消；全天启用，每个需求最多跟进一次。
+                      只对明确且适合助手帮助的需求观察。相关回应会取消，普通聊天保持安静。
                     </p>
+                    <label>
+                      自主发言冷却（秒）
+                      <input
+                        type="number"
+                        min={0}
+                        max={86400}
+                        value={config.cooldown_seconds ?? 300}
+                        onChange={(e) => {
+                          settingsDirty.current = true;
+                          setConfig({
+                            ...config,
+                            cooldown_seconds: Number(e.target.value),
+                          });
+                        }}
+                      />
+                    </label>
+                    <label>
+                      群内每日关怀上限
+                      <input
+                        type="number"
+                        min={0}
+                        max={10}
+                        value={config.care_group_limit ?? 1}
+                        onChange={(e) => {
+                          settingsDirty.current = true;
+                          setConfig({
+                            ...config,
+                            care_group_limit: Number(e.target.value),
+                          });
+                        }}
+                      />
+                    </label>
+                    <label className="toggle-label">
+                      自主参与仅观察
+                      <input
+                        type="checkbox"
+                        checked={config.participation_shadow ?? false}
+                        onChange={(e) => {
+                          settingsDirty.current = true;
+                          setConfig({
+                            ...config,
+                            participation_shadow: e.target.checked,
+                          });
+                        }}
+                      />
+                    </label>
                     <div className="model-info">
                       <Bot size={17} />
                       <span>
@@ -962,8 +1043,9 @@ export default function Chat({
                     ))}
                     <h3>当前成员：{user.name}</h3>
                     <p className="field-help">
-                      身份由当前页面 URL 的 user
-                      参数决定。可在群成员面板切换成员。
+                      {user.authenticated
+                        ? "已使用密码登录；当前浏览器共享此成员会话。切换成员需先在个人空间退出登录。"
+                        : "当前为 URL 演示身份；个人空间需要单独密码登录。"}
                     </p>
                   </div>
                 </>

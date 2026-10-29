@@ -4,6 +4,7 @@ import { Loader2, X } from "lucide-react";
 import Chat from "./Chat";
 import { api } from "./api";
 import type { User } from "./types";
+import Login from "./Login";
 import "./style.css";
 function App() {
   const [user, setUser] = useState<User | null>(null),
@@ -33,6 +34,7 @@ function App() {
       ) : (
         <main className="loading">
           <div>
+            <Login />
             <p>请选择家庭成员</p>
             <p>
               {[

@@ -103,6 +103,9 @@ def migrate():
         conn.execute(text('CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied REAL)'))
         conn.execute(text('CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts USING fts5(record_id UNINDEXED, group_id UNINDEXED, tokens)'))
         conn.execute(text('INSERT OR IGNORE INTO schema_migrations VALUES (1, :now)'), {'now': time.time()})
+        # Version 2 adds harness record kinds and memory metadata. The payload
+        # schema is additive; legacy memories retain group/long defaults.
+        conn.execute(text('INSERT OR IGNORE INTO schema_migrations VALUES (2, :now)'), {'now': time.time()})
     with DB() as db:
         if not get(db, 'group', 1, 'settings'):
             put(db, 'group', 1, 'settings', {'name': '我们一家', 'agent_name': '小忆', 'prompt': DEFAULT_PROMPT, 'active': True, 'wait_seconds': 30, 'version': 1})
@@ -115,3 +118,9 @@ def migrate():
             if not db.query(Member).filter_by(group_id=1, user_id=user.id).first():
                 db.add(Member(group_id=1, user_id=user.id))
         db.commit()
+    with DB() as db:
+        if not db.execute(text('SELECT version FROM schema_migrations WHERE version=3')).first():
+            from .repairs import repair_legacy_harness
+            repair_legacy_harness(db)
+            db.execute(text('INSERT INTO schema_migrations VALUES (3, :now)'), {'now': time.time()})
+            db.commit()

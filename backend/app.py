@@ -16,16 +16,18 @@ from fastapi.staticfiles import StaticFiles
 from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel, Field
 from .db import DB, DATA, User, Member, Message, Record, get, put, records, migrate
-from .memory import save_memory, delete_memory, search
+from .memory import save_memory, delete_memory, search, list_memories, visible
 from .agent import Agent
 from .monitor import snapshot
+from .auth import COOKIE, session_user
+from .intent import direct_mention
 
 connections = defaultdict(dict)
 
 async def broadcast(gid, event):
     for ws in list(connections[gid]):
         try:
-            identity(ws.query_params.get('user'))
+            websocket_user(ws)
             await ws.send_json(event)
         except Exception:
             connections[gid].pop(ws, None)
@@ -58,7 +60,21 @@ def identity(username):
         return {'id': u.id, 'name': u.name, 'username': u.username}
 
 def current(request: Request):
+    signed_in = session_user(request.cookies.get(COOKIE))
+    if signed_in:
+        return signed_in
+    if os.getenv('AUTH_REQUIRED', '').lower() in ('1', 'true') or request.cookies.get(COOKIE):
+        raise HTTPException(401, '请先登录')
     return identity(request.query_params.get('user'))
+
+
+def websocket_user(ws):
+    signed_in = session_user(ws.cookies.get(COOKIE))
+    if signed_in:
+        return signed_in
+    if os.getenv('AUTH_REQUIRED', '').lower() in ('1', 'true') or ws.cookies.get(COOKIE):
+        raise HTTPException(401, '会话已失效')
+    return identity(ws.query_params.get('user'))
 
 
 def access(gid, user):
@@ -132,7 +148,7 @@ async def send_message(gid: int, body: NewMessage, user=Depends(current)):
         db.add(m)
         db.flush()
         settings = get(db, 'group', gid, 'settings').data
-        mention = bool(re.search(r'@' + re.escape(settings['agent_name']) + r'(?=\s|[，。！？,:：!?]|$)', m.content))
+        mention = direct_mention(m.content, settings['agent_name'])
         put(db, 'job', gid, str(m.id), {'source': m.id, 'mention': mention, 'settings': settings, 'status': 'pending', 'analyzed': False})
         db.commit()
         result = serialized(db, m)
@@ -185,7 +201,7 @@ class MemoryBody(BaseModel):
 def memories(gid: int, q: str = '', user=Depends(current)):
     access(gid, user)
     with DB() as db:
-        return search(db, gid, q, 50) if q else [dict(key=r.key, **r.data) for r in records(db, 'memory', gid) if not r.data.get('deleted')]
+        return search(db, gid, q, 50) if q else list_memories(db, gid)
 
 @app.post('/api/groups/{gid}/memories')
 async def add_memory(gid: int, body: MemoryBody, user=Depends(current)):
@@ -202,9 +218,10 @@ async def edit_memory(gid: int, key: str, body: MemoryBody, user=Depends(current
     access(gid, user)
     with DB() as db:
         old = get(db, 'memory', gid, key)
-        if not old or old.data.get('deleted'):
+        if not old or not visible(old.data, gid):
             raise HTTPException(404, '记忆不存在')
-        r = save_memory(db, gid, body.content, old.data.get('sources', []), old.data.get('subjects', []), key, True)
+        r = save_memory(db, gid, body.content, old.data.get('sources', []), old.data.get('subjects', []), key, True,
+            lifetime=old.data.get('lifetime', 'long'), expires_at=old.data.get('expires_at'), scope=old.data.get('scope', 'group'))
         db.commit()
     await broadcast(gid, {'type': 'refresh'})
     return {'ok': True}
@@ -214,7 +231,7 @@ async def remove_memory(gid: int, key: str, user=Depends(current)):
     access(gid, user)
     with DB() as db:
         r = get(db, 'memory', gid, key)
-        if not r:
+        if not r or r.data.get('scope') == 'private':
             raise HTTPException(404, '记忆不存在')
         delete_memory(db, r)
         db.commit()
@@ -225,6 +242,9 @@ async def remove_memory(gid: int, key: str, user=Depends(current)):
 def revisions(gid: int, key: str, user=Depends(current)):
     access(gid, user)
     with DB() as db:
+        old = get(db, 'memory', gid, key)
+        if not old or old.data.get('scope') == 'private':
+            raise HTTPException(404, '记忆不存在')
         return [r.data for r in records(db, 'revision', gid) if r.data['memory_key'] == key]
 
 class TaskBody(BaseModel):
@@ -259,6 +279,10 @@ class SettingsBody(BaseModel):
     prompt: str = Field(min_length=1, max_length=12000)
     active: bool
     wait_seconds: int = Field(ge=1, le=86400)
+    cooldown_seconds: int = Field(default=300, ge=0, le=86400)
+    context_budget: int = Field(default=24000, ge=4000, le=64000)
+    care_group_limit: int = Field(default=1, ge=0, le=10)
+    participation_shadow: bool = False
 
 @app.get('/api/groups/{gid}/settings')
 def settings(gid: int, user=Depends(current)):
@@ -288,7 +312,7 @@ def activity(gid: int, user=Depends(current)):
     access(gid, user)
     with DB() as db:
         logs = [r.data for r in records(db, 'log', gid)][-50:][::-1]
-        failed = [dict(key=r.key, **r.data) for r in records(db, 'job', gid) if r.data['status'] == 'failed'][-20:]
+        failed = [dict(key=r.key, **r.data) for r in records(db, 'job', gid) if r.data['status'] in ('failed', 'reply_failed')][-20:]
         failed += [dict(key='demand:'+r.key, error=r.data.get('error', '候选生成失败'), mention=False) for r in records(db, 'demand', gid) if r.data['status'] == 'failed'][-20:]
         return {'logs': logs, 'failed': failed}
 
@@ -311,7 +335,7 @@ async def retry(gid: int, key: str, user=Depends(current)):
             db.commit()
             return {'ok': True}
         r = get(db, 'job', gid, key)
-        if not r or r.data['status'] != 'failed':
+        if not r or r.data['status'] not in ('failed', 'reply_failed'):
             raise HTTPException(400, '任务不可重试')
         d = r.data
         d['status'] = 'pending'
@@ -323,7 +347,7 @@ async def retry(gid: int, key: str, user=Depends(current)):
 @app.websocket('/ws/{gid}')
 async def websocket(ws: WebSocket, gid: int):
     try:
-        user = identity(ws.query_params.get('user'))
+        user = websocket_user(ws)
         access(gid, user)
         origin = ws.headers.get('origin', '')
         allowed = {f'http://{ws.headers.get("host")}', f'https://{ws.headers.get("host")}', 'http://localhost:5173', 'http://127.0.0.1:5173'}
@@ -338,13 +362,16 @@ async def websocket(ws: WebSocket, gid: int):
     try:
         while True:
             await ws.receive_text()
-            identity(ws.query_params.get('user'))
+            websocket_user(ws)
             await ws.send_json({'type': 'pong'})
     except (WebSocketDisconnect, HTTPException):
         pass
     finally:
         connections[gid].pop(ws, None)
         await broadcast(gid, {'type': 'presence'})
+
+from .harness_api import router as harness_router
+app.include_router(harness_router(agent))
 
 DIST = Path(__file__).resolve().parent.parent / 'frontend' / 'dist'
 if DIST.exists():

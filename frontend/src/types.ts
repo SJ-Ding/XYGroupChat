@@ -3,6 +3,7 @@ export type User = {
   name: string;
   username?: string;
   online?: boolean;
+  authenticated?: boolean;
 };
 export type Message = {
   id: number;
@@ -34,6 +35,10 @@ export type Config = {
   wait_seconds: number;
   configured: boolean;
   model: string;
+  cooldown_seconds?: number;
+  context_budget?: number;
+  care_group_limit?: number;
+  participation_shadow?: boolean;
 };
 export type Activity = {
   logs: { reason: string; at: number; source: number }[];

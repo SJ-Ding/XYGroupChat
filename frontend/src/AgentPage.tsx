@@ -25,6 +25,8 @@ type Job = {
   mention: boolean;
   updated: number;
   error?: string;
+  action_status?: string;
+  reply_status?: string;
 };
 type Demand = {
   key: string;
@@ -73,10 +75,14 @@ const labels: Record<string, string> = {
   running: "执行中",
   done: "已完成",
   failed: "失败",
+  reply_failed: "动作完成，回复失败",
   waiting: "观察中",
   sent: "已跟进",
   resolved: "已回应",
   cancelled: "已取消",
+  expired: "已过期",
+  duplicate: "重复跟进已抑制",
+  feedback_suppressed: "按反馈保持安静",
   analyzing: "分析聊天",
   replying: "生成回复",
   candidate: "预生成候选回复",
@@ -326,13 +332,17 @@ export default function AgentPage({
                       <button onClick={() => onSource(j.source)}>
                         来源消息 #{j.source}
                       </button>
-                      {j.status === "failed" && (
+                      {["failed", "reply_failed"].includes(j.status) && (
                         <button
                           disabled={retrying !== null}
                           onClick={() => retry(j.key)}
                         >
                           <RefreshCw size={14} />
-                          {retrying === j.key ? "正在重试…" : "重试任务"}
+                          {retrying === j.key
+                            ? "正在重试…"
+                            : j.status === "reply_failed"
+                              ? "仅重试回复"
+                              : "重试任务"}
                         </button>
                       )}
                     </footer>

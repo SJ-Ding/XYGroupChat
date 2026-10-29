@@ -8,6 +8,202 @@
   --muted: #8a9690;
   --border: #e9eeeb;
 }
+.harness-page {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+}
+.harness-header {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 24px 30px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.harness-header > div {
+  flex: 1;
+  min-width: 0;
+}
+.harness-header h1 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 22px;
+  margin: 0 0 6px;
+}
+.harness-header p {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 0;
+}
+.harness-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 24px 32px 60px;
+}
+.harness-toolbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.harness-tabs,
+.harness-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+}
+.harness-tabs button {
+  padding: 10px 14px;
+  border-radius: 9px;
+  background: #f3f6f4;
+  font-size: 13px;
+}
+.harness-tabs button.selected {
+  color: var(--green);
+  background: #e6f3eb;
+  font-weight: 600;
+}
+.harness-content h2 {
+  font-size: 18px;
+  margin: 22px 0 14px;
+}
+.harness-columns {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) minmax(260px, 1fr);
+  gap: 32px;
+  align-items: start;
+}
+.harness-columns > div {
+  min-width: 0;
+}
+.harness-card {
+  padding: 17px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  margin: 12px 0;
+  overflow-wrap: anywhere;
+}
+.harness-card p {
+  white-space: pre-wrap;
+  line-height: 1.7;
+  font-size: 14px;
+}
+.harness-card small {
+  display: block;
+  color: #64766d;
+  font-size: 12px;
+  margin-top: 6px;
+}
+.harness-card li {
+  font-size: 13px;
+  line-height: 1.8;
+  margin-bottom: 6px;
+}
+.harness-actions button {
+  font-size: 12px;
+  padding: 8px 11px;
+}
+.harness-login {
+  max-width: 460px;
+  margin: 24px auto;
+}
+.harness-login > p {
+  font-size: 14px;
+  line-height: 1.8;
+}
+.harness-error {
+  border: 1px solid #e7b8ad;
+  padding: 12px;
+  border-radius: 8px;
+  color: #8e392c;
+}
+.harness-content fieldset {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 15px;
+  min-width: 0;
+}
+.harness-content legend {
+  font-size: 13px;
+}
+.harness-content fieldset label {
+  margin-bottom: 12px;
+}
+.harness-weekdays {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.harness-weekdays label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.harness-weekdays input {
+  width: auto;
+}
+.harness-content .harness-weekdays input {
+  width: 18px;
+  height: 18px;
+}
+.private-messages {
+  max-height: 420px;
+  overflow: auto;
+}
+.private-mine {
+  background: #eff7f1;
+}
+.harness-metrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  font-size: 14px;
+}
+.harness-metrics dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 900px) {
+  .harness-columns {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 700px) {
+  .harness-header {
+    padding: 16px;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .harness-header h1 {
+    font-size: 17px;
+  }
+  .harness-header .secondary {
+    padding: 7px;
+    font-size: 11px;
+  }
+  .harness-body {
+    padding: 16px 16px 70px;
+  }
+  .harness-tabs button {
+    font-size: 11px;
+    padding: 8px;
+  }
+  .shell .rail-links button {
+    min-width: 0;
+    flex: 1;
+    padding-left: 4px;
+    padding-right: 4px;
+  }
+  .shell .rail .logout {
+    display: none;
+  }
+}
 .agent-page {
   flex: 1;
   min-width: 0;
