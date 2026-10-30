@@ -23,6 +23,8 @@ import {
   ArrowRight,
   Bot,
 } from "lucide-react";
+import { ConversationCard, TaskBar } from "./ConversationCard";
+import type { ChatCard, AgentTask } from "./types";
 import AgentPage from "./AgentPage";
 import MessageDetails from "./MessageDetails";
 import { ChatAnnotation, useChatAnnotations } from "./ChatDebug";
@@ -47,6 +49,13 @@ export default function Chat({
 }) {
   const observer = user.username === "agent";
   const [debugSelection, setDebugSelection] = useState<{source:number; keys?:string[]} | null>(null);
+  const [cards, setCards] = useState<ChatCard[]>([]);
+  const [agentTasks, setAgentTasks] = useState<AgentTask[]>([]);
+  async function syncCards() {
+    const tasks = await api<AgentTask[]>(base + "/agent-tasks");
+    const rows = await api<ChatCard[]>(base + "/cards");
+    setAgentTasks(tasks); setCards(rows);
+  }
   const [messages, setMessages] = useState<Message[]>([]),
     [members, setMembers] = useState<User[]>([]),
     [panel, setPanel] = useState<Panel>(null),
@@ -66,6 +75,7 @@ export default function Chat({
     [lightbox, setLightbox] = useState<string | null>(null),
     [highlight, setHighlight] = useState<number | null>(null);
   const [memoryEdit, setMemoryEdit] = useState<{
+    version?: number;
       key?: string;
       content: string;
     } | null>(null),
@@ -148,6 +158,10 @@ export default function Chat({
       if (rows.length) cursor = rows[rows.length - 1].id;
     } while (rows.length === 100);
   }
+  async function refreshTasks() {
+    const state = await api<{foreground: {status: string}}>(base + "/agent/status");
+    setStatus(state.foreground.status);
+  }
   async function refresh() {
     const [c, m, t, a, u] = await Promise.all([
       api<Config>(base + "/settings"),
@@ -176,25 +190,36 @@ export default function Chat({
       })
       .catch((e) => notify(e.message));
     refresh().catch((e) => notify(e.message));
+    refreshTasks().catch((e) => notify(e.message));
+    syncCards().catch((e) => notify(e.message));
+    const cardTimer = setInterval(() => { syncCards().then(() => sync()).catch(() => {}); }, 5000);
     function connect() {
       ws = new WebSocket(
         `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}${identityUrl("/ws/1")}`,
       );
       ws.onopen = () => {
         setOnline(true);
+        refreshTasks().catch(() => {});
         sync().catch((e) => notify(e.message));
+        syncCards().catch((e) => notify(e.message));
         heartbeat = setInterval(() => {
           if (ws.readyState === 1) ws.send("ping");
         }, 25000);
       };
       ws.onmessage = (e) => {
         const event = JSON.parse(e.data);
+        if (event.type === "card_update" || event.type === "task_update" || event.type === "refresh") {
+          syncCards().then(() => sync()).catch((e) => notify(e.message));
+        }
         if (event.type === "message") {
           scrollToBottom.current = true;
           sync().catch((e) => notify(e.message));
         }
         if (event.type === "presence" || event.type === "refresh")
           refresh().catch(() => {});
+        if (event.type === "task_update") {
+          refreshTasks().catch(() => {});
+        }
         if (event.type === "agent") {
           setStatus(event.status);
           if (event.status === "failed") notify(event.error);
@@ -209,6 +234,7 @@ export default function Chat({
     connect();
     return () => {
       alive = false;
+      clearInterval(cardTimer);
       clearTimeout(timer);
       clearInterval(heartbeat);
       ws.close();
@@ -296,7 +322,7 @@ export default function Chat({
         base + "/memories" + (memoryEdit.key ? "/" + memoryEdit.key : ""),
         {
           method: memoryEdit.key ? "PUT" : "POST",
-          body: JSON.stringify({ content: memoryEdit.content }),
+          body: JSON.stringify({ content: memoryEdit.content, version: memoryEdit.version }),
         },
       );
       setMemoryEdit(null);
@@ -401,7 +427,7 @@ export default function Chat({
               <strong>我们一家</strong>
               <small>4 位成员 · 家庭群</small>
               <p>
-                {messages.at(-1)?.content || "把日常的小事，慢慢聊给家人听。"}
+                {messages.filter(m => !m.hidden).at(-1)?.content || "把日常的小事，慢慢聊给家人听。"}
               </p>
             </span>
             <span className="conversation-time">
@@ -484,6 +510,7 @@ export default function Chat({
               </button>
             </div>
           </header>
+          {!observer && <TaskBar tasks={agentTasks} locate={source} />}
           {observer && annotations.error && <p role="alert" className="chat-debug-error">分类信息连接中断：{annotations.error}。当前为上次成功记录。</p>}
           <div
             className="messages"
@@ -525,7 +552,7 @@ export default function Chat({
                 </p>
               </div>
             )}
-            {(search ? searchResults : messages).map((m, i, all) => (
+            {(search ? searchResults : messages).filter(m => !m.hidden).map((m, i, all) => (
               <React.Fragment key={m.id}>
                 {(i === 0 ||
                   new Date(m.created * 1000).toDateString() !==
@@ -552,7 +579,8 @@ export default function Chat({
                       <time>{time(m.created)}</time>
                     </div>
                     <div className="bubble">
-                      {m.content && <p>{m.content}</p>}
+                      {m.content && !cards.some(c => c.message_id === m.id) && !(m.cards?.length) && <p>{m.content}</p>}
+                      {cards.filter(c => c.message_id === m.id).map(c => observer ? <div key={c.id}><strong>{c.title}</strong><p>{c.description}</p></div> : <ConversationCard key={c.id + ":" + c.version} card={c} onUpdate={syncCards} />)}
                       {m.attachments.map((k) => (
                         <button
                           className="chat-image"
@@ -757,7 +785,7 @@ export default function Chat({
                           <button
                             aria-label="编辑记忆"
                             onClick={() =>
-                              setMemoryEdit({ key: m.key, content: m.content })
+                              setMemoryEdit({ key: m.key, content: m.content, version: m.version })
                             }
                           >
                             <Pencil size={16} />

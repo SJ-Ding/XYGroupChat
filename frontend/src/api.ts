@@ -27,8 +27,8 @@ export async function api<T = any>(
   if (!r.ok) {
     const d = await r.json().catch(() => ({ detail: "服务暂时不可用" }));
     throw Object.assign(
-      new Error(typeof d.detail === "string" ? d.detail : "请检查填写内容"),
-      { status: r.status },
+      new Error(typeof d.detail === "string" ? d.detail : d.detail?.message || "请检查填写内容"),
+      { status: r.status, fields: d.detail?.fields },
     );
   }
   return r.json();

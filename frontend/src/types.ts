@@ -13,8 +13,11 @@ export type Message = {
   attachments: string[];
   created: number;
   client_id: string;
+  cards?: ChatCard[];
+  hidden?: boolean;
 };
 export type Memory = {
+  version?: number;
   key: string;
   content: string;
   sources: number[];
@@ -64,3 +67,15 @@ export type Activity = {
   failed: { key: string; error: string; mention: boolean }[];
 };
 export type Panel = "memory" | "tasks" | "settings" | "members" | null;
+
+export type ChatCard = {
+  id: string; message_id: number; kind: string; title: string; description: string;
+  version: number; status: string; phase?: string; run_key?: string; amount?: string;
+  items: {label: string; value: string}[];
+  fields: {key: string; label: string; type: "text" | "number" | "select"; required: boolean; options: string[]}[];
+  links: {label: string; url: string}[];
+  steps?: {id: string; title: string; status: string}[];
+  actions?: string[];
+  submitted_values?: Record<string, string | number>;
+};
+export type AgentTask = {key: string; title: string; status: string; card_id: string; message_id: number; steps: {status: string}[]};

@@ -119,9 +119,24 @@ def groups(user=Depends(current)):
         return [{'id': m.group_id, **get(db, 'group', m.group_id, 'settings').data} for m in db.query(Member).filter_by(user_id=user['id']).all()]
 
 def serialized(db, m):
+    from .cards import public_card, hidden_message, task_title
     settings = get(db, 'group', m.group_id, 'settings').data
     u = db.get(User, m.user_id)
-    return {'id': m.id, 'user_id': m.user_id, 'name': u.name if u else settings['agent_name'], 'client_id': m.client_id, 'content': m.content, 'attachments': json.loads(m.attachments), 'created': m.created}
+    cards = [public_card(db, m.group_id, r.data) for r in records(db, 'card', m.group_id) if r.data['message_id'] == m.id]
+    content = m.content
+    if cards and cards[0]['kind'] == 'progress':
+        run = get(db, 'run', m.group_id, cards[0].get('run_key'))
+        if run:
+            content = task_title(run.data)
+            cards[0]['title'] = content
+    # Render legacy result outbox entries with the same single-card presentation.
+    if m.user_id == 0 and m.client_id.startswith('result:'):
+        run = next((r for r in records(db, 'run', m.group_id) if r.data.get('kind') == 'skill' and m.client_id.startswith('result:' + r.key + ':')), None)
+        if run:
+            prefix = '【' + run.data['title'] + '】\n'
+            if content.startswith(prefix):
+                content = content[len(prefix):]
+    return {'id': m.id, 'user_id': m.user_id, 'name': u.name if u else settings['agent_name'], 'client_id': m.client_id, 'content': content, 'attachments': json.loads(m.attachments), 'created': m.created, 'cards': cards, 'hidden': hidden_message(db, m)}
 
 @app.get('/api/groups/{gid}/messages')
 def messages(gid: int, before: Optional[int] = None, after: Optional[int] = None, around: Optional[int] = None, query: str = '', user=Depends(current)):
@@ -211,6 +226,7 @@ def members(gid: int, user=Depends(current)):
         return [{'id': u.id, 'name': u.name, 'online': u.id in online} for u in db.query(User).filter(User.id.in_(ids)).all()]
 
 class MemoryBody(BaseModel):
+    version: int | None = Field(default=None, ge=1)
     content: str = Field(min_length=1, max_length=2000)
 
 @app.get('/api/groups/{gid}/memories')
@@ -236,6 +252,8 @@ async def edit_memory(gid: int, key: str, body: MemoryBody, user=Depends(current
         old = get(db, 'memory', gid, key)
         if not old or not visible(old.data, gid):
             raise HTTPException(404, '记忆不存在')
+        if body.version is not None and body.version != old.data.get('version', 1):
+            raise HTTPException(409, '记忆已更新，请刷新后重试')
         r = save_memory(db, gid, body.content, old.data.get('sources', []), old.data.get('subjects', []), key, True,
             lifetime=old.data.get('lifetime', 'long'), expires_at=old.data.get('expires_at'), scope=old.data.get('scope', 'group'))
         db.commit()
@@ -422,6 +440,9 @@ async def websocket(ws: WebSocket, gid: int):
 
 from .harness_api import router as harness_router
 app.include_router(harness_router(agent))
+
+from .cards import install_routes
+install_routes(app, current, access)
 
 DIST = Path(__file__).resolve().parent.parent / 'frontend' / 'dist'
 if DIST.exists():

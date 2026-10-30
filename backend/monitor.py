@@ -3,6 +3,7 @@ import os
 from collections import Counter
 from .db import DB, Message, get, records
 from .skills import REGISTRY
+from .background import public_task
 from .governance import metrics
 from .memory_lifecycle import status as memory_status
 
@@ -38,6 +39,8 @@ def snapshot(agent, gid):
             'model': {'name': os.getenv('DEEPSEEK_MODEL', 'deepseek-flash'), 'configured': bool(os.getenv('DEEPSEEK_API_KEY'))},
             'behavior': {'active': settings['active'], 'wait_seconds': settings['wait_seconds'], 'version': settings['version'], 'blocked': blocked},
             'counts': {'running': len(executions), 'pending': sum(r.data.get('status') == 'pending' and r.key not in running_keys for r in jobs), 'done': counts['done'], 'failed': counts['failed'] + counts['reply_failed'] + failed_demands, 'observing': sum(r.data.get('status') == 'waiting' for r in demands)},
+            'foreground': {'status': 'generating' if any(e['phase'] in ('replying', 'analyzing') for e in executions) else 'idle'},
+            'background_tasks': [public_task(r.key, r.data) for r in sorted((r for r in records(db, 'run', gid) if r.data.get('kind') == 'skill'), key=lambda r: (r.data['status'] in ('queued', 'running', 'waiting_input'), r.id), reverse=True)][:30],
             'executions': executions,
             'jobs': [job_row(r) for r in job_order[:30]],
             'demands': [demand_row(r) for r in demand_order[:30]],

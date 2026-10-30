@@ -182,7 +182,7 @@ async def test_reply_retry_skips_successful_tools_and_reports_partial_state(monk
     with DB() as db:
         assert get(db,'job',1,str(mid)).data['status']=='done'
         assert get(db,'run',1,'mention:'+str(mid)).data['reply_status']=='sent'
-        assert db.query(Message).filter_by(user_id=0).count()==1
+        assert db.query(Message).filter_by(user_id=0).filter(~Message.client_id.startswith('card:')).count()==1
         assert len(list_memories(db,1))==1
     await a.close()
 

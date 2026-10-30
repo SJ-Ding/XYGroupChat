@@ -33,7 +33,7 @@ def list_memories(db, gid, viewer_id=None, now=None):
 def save_memory(db, gid, content, sources=None, subjects=None, key=None, manual=False,
                 *, lifetime='long', expires_at=None, scope=None, owner_id=None,
                 confirmed=None, now=None, sensitive=False, explicit=False,
-                metadata=None, replace_automatic=False):
+                metadata=None, replace_automatic=False, expected_version=None):
     now = time.time() if now is None else now
     scope = scope or ('private' if gid < 0 else 'group')
     if not isinstance(content, str) or not content.strip() or len(content) > 2000:
@@ -58,6 +58,8 @@ def save_memory(db, gid, content, sources=None, subjects=None, key=None, manual=
             if d.get('manual') and d.get('explicit') and not d.get('deleted') and sources and set(sources) <= set(d.get('sources', [])):
                 return candidate
     old = get(db, 'memory', gid, key) if key else None
+    if expected_version is not None and (not old or old.data.get('version', 1) != expected_version):
+        raise ValueError('记忆版本冲突，请刷新后重试')
     if old and (old.data.get('manual') or old.data.get('deleted')) and not manual:
         return old
     if old and not manual and old.data['content'] != content and not replace_automatic:

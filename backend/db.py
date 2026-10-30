@@ -71,8 +71,28 @@ class Record(Base):
         return json.loads(self.payload)
 
     def set(self, data):
-        self.payload = json.dumps(data, ensure_ascii=False)
-        self.updated = time.time()
+        from sqlalchemy import inspect, update
+        from sqlalchemy.orm import object_session
+        from sqlalchemy.orm.attributes import set_committed_value
+        old_payload = self.payload
+        if self.kind == 'memory':
+            previous = json.loads(old_payload) if old_payload else {}
+            data = {**data, 'version': previous.get('version', 1) + 1 if old_payload else 1}
+        payload = json.dumps(data, ensure_ascii=False)
+        now = time.time()
+        # Compare the persisted representation, including legacy rows without a version.
+        if self.kind == 'memory' and inspect(self).persistent:
+            session = object_session(self)
+            with session.no_autoflush:
+                changed = session.execute(update(Record).where(Record.id == self.id, Record.payload == old_payload)
+                    .values(payload=payload, updated=now).execution_options(synchronize_session=False)).rowcount
+            if changed != 1:
+                raise ValueError('记忆已被其他任务更新，请重新读取后重试')
+            set_committed_value(self, 'payload', payload)
+            set_committed_value(self, 'updated', now)
+        else:
+            self.payload = payload
+            self.updated = now
 
 def put(db, kind, gid, key, data):
     r = db.query(Record).filter_by(kind=kind, group_id=gid, key=str(key)).first()

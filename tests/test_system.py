@@ -100,7 +100,7 @@ async def test_candidate_wait_send_once_and_restart():
     b=Agent(no_broadcast,FakeModel(),lambda:clock[0])
     await b.tick();await b.tick()
     with DB() as db:
-        assert db.query(Message).filter_by(user_id=0).count()==1
+        assert db.query(Message).filter_by(user_id=0).filter(~Message.client_id.startswith('card:')).count()==1
         assert get(db,'demand',1,'need').data['status']=='sent'
     await a.close();await b.close()
 
@@ -172,6 +172,6 @@ async def test_mention_context_images_and_configuration_snapshot():
     await a.process(1,str(mid))
     with DB() as db:
         assert get(db,'job',1,str(mid)).data['status']=='done'
-        assert db.query(Message).filter_by(user_id=0).count()==1
+        assert db.query(Message).filter_by(user_id=0).filter(~Message.client_id.startswith('card:')).count()==1
     assert any('只用简短中文回复' in str(messages) for messages,_ in a.model.calls)
     await a.close()
