@@ -14,6 +14,7 @@ from .contracts import ConversationEvent
 from .intent import recognize, parse_intent
 from .participation import decide, send_policy
 from .authorization import command_grants
+from .reminder_language import reminder_request
 from .context import bounded_context, fit_sections, tool_content, text_size
 from .governance import measured_call
 from .debugging import traced_call
@@ -119,6 +120,11 @@ class Agent:
         return await measured_call(self.model, gid, *args, **kwargs)
 
     async def generate(self, gid, mid, settings, run_id, proactive=False, allow_writes=False):
+        with DB() as db:
+            source = db.get(Message, mid)
+            reminder = reminder_request(source.content, settings['agent_name'], source.created) if not proactive else None
+        if reminder and reminder.clarification:
+            return reminder.clarification
         messages = await self.context(gid, mid, settings)
         if proactive:
             messages.append({'role': 'system', 'content': '为尚未得到回应的家庭需求准备一句自然、体贴的小帮助。不要说“检测到需求”或解释观察流程，不催家人、不替别人回答或承诺。只提一个眼下能帮上的具体帮助，不创建事项；无关回复不代表问题解决。'})
@@ -239,11 +245,11 @@ class Agent:
             grant['tool'] == 'remember' for grant in command_grants(message.content, settings['agent_name'], message.created))
         with DB() as db:
             intent=parse_intent(data)
-            items=[] if explicit_memory or intent.quoted or intent.kind=='joke' else (
+            items=[] if explicit_memory or reminder_request(message.content, settings['agent_name'], message.created) or intent.quoted or intent.kind=='joke' else (
                 transitions(known,data.get('memory_updates') or [],message,intent)+(data.get('memories') or []))
             data['memory_changes']=capture_memories(db,gid,message,items,settings,self.now(),{m['key'] for m in known})
             self.log(db, gid, str(data.get('reason', '已分析'))[:500], message.id)
-            put(db, 'decision', gid, str(message.id), {**decision.data(), 'source': message.id, 'user_id': message.user_id, 'at': self.now()})
+            put(db, 'decision', gid, str(message.id), {**decision.data(), 'intent': vars(intent), 'source': message.id, 'user_id': message.user_id, 'at': self.now()})
             for update in data.get('updates', []):
                 r = get(db, 'demand', gid, update.get('key', ''))
                 if not r or r.data['status'] != 'waiting':

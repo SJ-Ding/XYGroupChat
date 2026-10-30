@@ -130,7 +130,7 @@ def message_annotations(gid, ids):
         for m in messages:
             if m.user_id:
                 job = next((d for d in jobs.values() if d.get('source') == m.id), {})
-                result[str(m.id)] = {'decision': decisions.get(str(m.id)), 'intent': analyses.get(m.id), 'status': job.get('status')}
+                result[str(m.id)] = {'decision': decisions.get(str(m.id)), 'intent': decisions.get(str(m.id), {}).get('intent') or analyses.get(m.id), 'status': job.get('status')}
             else:
                 source, run_id = linked.get(m.id, (None, None))
                 matching = [r[0] for r in traces if r[1] == source and

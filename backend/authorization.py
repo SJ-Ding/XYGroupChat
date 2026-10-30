@@ -2,6 +2,7 @@
 import re
 from .contracts import ActionGrant
 from .persona import names_for
+from .reminder_language import reminder_request
 
 
 def command_grants(text, agent_name, created):
@@ -20,11 +21,9 @@ def command_grants(text, agent_name, created):
     m = re.fullmatch(r'完成待办[：:]\s*([\w-]+)', text)
     if m:
         return [ActionGrant('family_tasks', {'action': 'complete', 'key': m[1]}).data()]
-    m = re.fullmatch(r'(\d+|一|两|二|三|五|十)(分钟|小时|天)后提醒(?:我们|我)?[：:，,\s]*(.+)', text, re.S)
-    if m:
-        count = int(m[1]) if m[1].isdigit() else {'一': 1, '两': 2, '二': 2, '三': 3, '五': 5, '十': 10}[m[1]]
-        at = created + count * {'分钟': 60, '小时': 3600, '天': 86400}[m[2]]
-        return [ActionGrant('group_reminder', {'content': m[3].strip(), 'at': at}).data()]
+    reminder = reminder_request(text, agent_name, created)
+    if reminder and reminder.at is not None:
+        return [ActionGrant('group_reminder', {'content': reminder.content.strip(), 'at': reminder.at}).data()]
     return []
 
 

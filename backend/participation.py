@@ -12,8 +12,10 @@ def decide(event, intent, settings):
         return ParticipationDecision('silent', '不是确定的求助，保持安静', intent.topic)
     # Model labels alone cannot turn a declarative plan update into a request.
     # Explicit named addresses (including natural “小艺，…”) take the direct path.
-    if not re.search(r'[？?]|怎么|如何|帮我|帮忙|麻烦|请|能否|能不能|谁能|谁来|有没有',event.content):
+    if not re.search(r'[？?]|怎么|如何|帮我|帮忙|麻烦|请|能否|能不能|谁能|谁来|有没有|是否|告诉我|查一下|查查|查询|搜索|推荐|解释|算一下|计算|整理一下|列出|给我|提醒(?:我|我们)|[吗么呢](?:[。！!\s]*$)',event.content):
         return ParticipationDecision('silent', '近况陈述不触发跟进', intent.topic)
+    if intent.target == 'agent':
+        return ParticipationDecision('reply', '明确面向助手的请求，无需等待家人回应', intent.topic)
     if settings.get('active') and intent.assistant_helpful:
         return ParticipationDecision('observe', '优先等待家人回应', intent.topic)
     return ParticipationDecision('silent', '没有明确的助手帮助空间', intent.topic)

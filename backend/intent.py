@@ -4,6 +4,7 @@ import re
 from .contracts import Intent
 from .context import analysis_payload
 from .persona import names_for, DEFAULT_AGENT_NAME
+from .reminder_language import reminder_request
 
 
 def direct_mention(text, name):
@@ -37,6 +38,7 @@ async def recognize(model_call, *, waiting, memories, names, messages, now=None,
 "memory_updates":[{"key":"known_memories中的key","operation":"resolve/cancel","evidence":"最新消息原文片段","confidence":0.95}],
 "memories":[{"content":"带说话对象和必要限定的事实","subjects":["成员"],"subject_ids":[2],"topic":"同一件事的稳定主题","category":"preference/fact/plan/state/event","lifetime":"short/working","expires_at":null,"stable":false,"tentative":false,"operation":"upsert/update/resolve/cancel","evidence":"最新消息中的原文片段","existing_key":null,"confidence":0.95}],"reason":"简短证据"}。
 只有真正相关的消息可更新已有需求；目标成员回复、发起人取消或明确放弃话题应结束需求，无关消息不改变它。
+面向助手的请求不要求@称呼或问号。“三点一刻的时候提醒我出门”“十五分钟后提醒我关火”是明确提醒请求，kind=request、target=agent、assistant_helpful=true；“顾村公园下午开放吗”在明确询问信息时也是request，不因没有问号降为陈述。对“妈妈，三点提醒我”应target=member；“我明天下午三点出门”只是计划；“他说三点提醒我出门”只是转述。
 新需求必须是真实请求。只有助手可提供具体帮助时 assistant_helpful 才为 true；不能替家人承诺。
 记录或更新近况不等于向助手提出请求。“我改到后天下午去”“这件事取消了”等陈述归discussion/cancel，不能因为提取了记忆就把target标为agent。仅最新消息明确向助手求助才标agent；不能从历史请求延续出新授权。
 最多提取3条对接下来交流有帮助、最新消息明确表达的非敏感记忆。近期安排、打算、正在处理的事情和暂时状态也可以记为短期；不等于创建任务或提醒。
@@ -58,4 +60,11 @@ async def recognize(model_call, *, waiting, memories, names, messages, now=None,
         raise ValueError('意图格式不正确')
     if data.get('new_need') is not None and not isinstance(data['new_need'], dict):
         raise ValueError('需求格式不正确')
+    latest = messages[-1] if messages else None
+    reminder = reminder_request(latest['text'], agent_name, latest.get('created', now) or 0) if latest else None
+    if reminder and not parse_intent(data).quoted and parse_intent(data).kind != 'joke':
+        data['intent'] = {**(data.get('intent') or {}), 'kind': 'request', 'target': 'agent',
+                          'confidence': 1.0, 'assistant_helpful': True, 'quoted': False}
+        data['reason'] = '最新消息明确要求助手设置一次性提醒；时间不明确时先澄清'
+        data['new_need'] = None
     return data
