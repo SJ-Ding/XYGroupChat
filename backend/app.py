@@ -19,6 +19,7 @@ from .db import DB, DATA, User, Member, Message, Record, get, put, records, migr
 from .memory import save_memory, delete_memory, search, list_memories, visible
 from .agent import Agent
 from .monitor import snapshot
+from .debugging import message_list, message_detail, message_annotations
 from .auth import COOKIE, session_user
 from .intent import direct_mention
 
@@ -51,36 +52,49 @@ async def lifespan(app):
 app = FastAPI(title='小艺 · 家庭聊天', lifespan=lifespan)
 
 def identity(username):
+    if username == 'agent':
+        with DB() as db:
+            settings = get(db, 'group', 1, 'settings')
+            return {'id': 0, 'name': settings.data['agent_name'] if settings else '小艺', 'username': 'agent', 'observer': True}
     if username not in ('dad', 'mom', 'child'):
-        raise HTTPException(400, '请通过 URL 指定 user=dad、mom 或 child')
+        raise HTTPException(400, '请通过 URL 指定 user=dad、mom、child 或 agent')
     with DB() as db:
         u = db.query(User).filter_by(username=username).first()
         if not u:
             raise HTTPException(400, '家庭成员尚未初始化')
         return {'id': u.id, 'name': u.name, 'username': u.username}
 
-def current(request: Request):
-    signed_in = session_user(request.cookies.get(COOKIE))
+def resolved_user(params, cookies):
+    signed_in = session_user(cookies.get(COOKIE))
     if signed_in:
+        if params.get('user') == 'agent':
+            return {**signed_in, 'name': identity('agent')['name'], 'username': 'agent', 'observer': True}
         return signed_in
-    if os.getenv('AUTH_REQUIRED', '').lower() in ('1', 'true') or request.cookies.get(COOKIE):
+    if os.getenv('AUTH_REQUIRED', '').lower() in ('1', 'true') or cookies.get(COOKIE):
         raise HTTPException(401, '请先登录')
-    return identity(request.query_params.get('user'))
+    return identity(params.get('user'))
+
+
+def current(request: Request):
+    user = resolved_user(request.query_params, request.cookies)
+    if user.get('observer') and request.method not in ('GET', 'HEAD', 'OPTIONS'):
+        raise HTTPException(403, 'Agent 聊天视角仅供查看，请切换家庭成员操作')
+    return user
 
 
 def websocket_user(ws):
-    signed_in = session_user(ws.cookies.get(COOKIE))
-    if signed_in:
-        return signed_in
-    if os.getenv('AUTH_REQUIRED', '').lower() in ('1', 'true') or ws.cookies.get(COOKIE):
-        raise HTTPException(401, '会话已失效')
-    return identity(ws.query_params.get('user'))
+    return resolved_user(ws.query_params, ws.cookies)
 
 
 def access(gid, user):
+    if user.get('observer') and not user.get('authenticated'):
+        if gid != 1:
+            raise HTTPException(403, '你不在此群组中')
+        return
     with DB() as db:
         if not db.query(Member).filter_by(group_id=gid, user_id=user['id']).first():
             raise HTTPException(403, '你不在此群组中')
+
 
 @app.middleware('http')
 async def same_origin(request, call_next):
@@ -100,6 +114,8 @@ def me(user=Depends(current)):
 @app.get('/api/groups')
 def groups(user=Depends(current)):
     with DB() as db:
+        if user.get('observer') and not user.get('authenticated'):
+            return [{'id': 1, **get(db, 'group', 1, 'settings').data}]
         return [{'id': m.group_id, **get(db, 'group', m.group_id, 'settings').data} for m in db.query(Member).filter_by(user_id=user['id']).all()]
 
 def serialized(db, m):
@@ -330,6 +346,30 @@ def activity(gid: int, user=Depends(current)):
 def agent_status(gid: int, user=Depends(current)):
     access(gid, user)
     return snapshot(agent, gid)
+
+@app.get('/api/groups/{gid}/agent/annotations')
+def agent_annotations(gid: int, ids: str = '', user=Depends(current)):
+    access(gid, user)
+    try:
+        selected = [int(value) for value in ids.split(',') if value]
+    except ValueError:
+        raise HTTPException(422, '消息编号格式不正确')
+    if len(selected) > 100:
+        raise HTTPException(422, '每次最多查询100条消息')
+    return message_annotations(gid, selected)
+
+@app.get('/api/groups/{gid}/agent/messages')
+def agent_messages(gid: int, before: Optional[int] = None, user=Depends(current)):
+    access(gid, user)
+    return message_list(gid, before)
+
+@app.get('/api/groups/{gid}/agent/messages/{mid}')
+def agent_message(gid: int, mid: int, user=Depends(current)):
+    access(gid, user)
+    detail = message_detail(gid, mid)
+    if detail is None:
+        raise HTTPException(404, '消息不存在')
+    return detail
 
 @app.post('/api/groups/{gid}/retry/{key}')
 async def retry(gid: int, key: str, user=Depends(current)):

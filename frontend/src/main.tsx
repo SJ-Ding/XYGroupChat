@@ -41,6 +41,7 @@ function App() {
                 ["dad", "爸爸"],
                 ["mom", "妈妈"],
                 ["child", "小宇"],
+                ["agent", "Agent 聊天视角"],
               ].map(([id, name]) => (
                 <a key={id} href={"/?user=" + id} style={{ marginRight: 16 }}>
                   {name}

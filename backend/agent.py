@@ -16,6 +16,7 @@ from .participation import decide, send_policy
 from .authorization import command_grants
 from .context import bounded_context, fit_sections, tool_content, text_size
 from .governance import measured_call
+from .debugging import traced_call
 from .orchestration import run_steps
 from .proactive import schedule_tick
 from .persona import system_prompt
@@ -173,7 +174,7 @@ class Agent:
         for _ in range(4):
             if sum(text_size(m) + len(m.get('reasoning_content') or '') + len(json.dumps(m.get('tool_calls', []), ensure_ascii=False)) for m in messages) > settings.get('context_budget', 24000) + 20000:
                 raise RuntimeError('工具上下文超过预算，请缩小查询范围；已完成动作已保留')
-            answer = await self.call(gid, messages, tools=tools(False, [], ctx.selected))
+            answer = await traced_call(self, gid, mid, 'candidate' if proactive else 'reply', messages, run_id=run_id, tools=tools(False, [], ctx.selected))
             calls = answer.get('tool_calls') or []
             if not calls:
                 content = answer.get('content') or ''
@@ -227,7 +228,7 @@ class Agent:
             known = list_memories(db, gid, -gid if gid < 0 else None, self.now())[-30:]
             names = {u.id: u.name for u in db.query(User).all()}
         from .intent import direct_mention
-        data = await recognize(lambda *a, **kw: self.call(gid, *a, **kw), waiting=waiting,
+        data = await recognize(lambda messages, **kw: traced_call(self, gid, message.id, 'analysis', messages, **kw), waiting=waiting,
             memories=known, names=names, messages=[{'id': m.id, 'sender': m.user_id, 'text': m.content,'created':m.created} for m in recent],
             now=self.now(),agent_name=settings['agent_name'],short_days=settings.get('memory_short_days',7))
         event = ConversationEvent(gid, message.user_id, message.id, message.content, message.created,

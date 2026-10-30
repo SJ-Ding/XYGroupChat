@@ -2075,3 +2075,37 @@ small {
     max-height: 200px;
   }
 }
+
+/* Message-level agent evidence viewer. */
+.message-debug { display: grid; grid-template-columns: minmax(240px, 1fr) minmax(0, 2fr); gap: 20px; align-items: start; }
+.debug-message-list, .debug-detail { min-width: 0; }
+.debug-message-list { max-height: 72vh; overflow: auto; }
+.debug-message { display: block; width: 100%; text-align: left; border: 1px solid var(--border); border-radius: 9px; background: white; padding: 14px; margin-bottom: 10px; }
+.debug-message.selected { border-color: var(--green); background: #edf5ef; }
+.debug-message > span:first-child { display: flex; flex-wrap: wrap; gap: 6px 12px; justify-content: space-between; }
+.debug-message small, .debug-detail small { color: #728b7b; font-size: 11px; }
+.debug-message p { white-space: pre-wrap; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.7; }
+.debug-detail { border: 1px solid var(--border); border-radius: 9px; padding: 18px; background: white; }
+.debug-detail-heading, .debug-pagination { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.debug-decision { padding: 14px; background: #edf5ef; border-radius: 8px; overflow-wrap: anywhere; }
+.debug-decision p, .debug-event { font-size: 13px; line-height: 1.8; }
+.debug-trace { border-top: 1px solid var(--border); padding: 12px 0; }
+.debug-trace h3 { font-size: 13px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.debug-evidence { margin: 12px 0; font-size: 12px; }
+.debug-evidence summary { cursor: pointer; padding: 8px 0; overflow-wrap: anywhere; }
+.debug-evidence pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 420px; overflow: auto; padding: 12px; border-radius: 6px; background: #f5f8f6; line-height: 1.7; }
+.debug-message:focus-visible, .debug-evidence summary:focus-visible { outline: 2px solid var(--green); outline-offset: 3px; }
+@media (max-width: 900px) { .message-debug { grid-template-columns: minmax(0, 1fr); } .debug-message-list { max-height: 380px; overflow: auto; } .debug-detail { padding: 12px; } }
+
+.chat-debug-note { margin-top: 10px; max-width: 650px; color: #60786a; font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
+.chat-debug-note p { margin: 5px 0 0; }
+.chat-debug-note button { color: var(--green); text-decoration: underline; text-underline-offset: 3px; }
+.chat-debug-tags { display: flex; flex-wrap: wrap; gap: 5px 10px; align-items: center; }
+.decision-chip { padding: 2px 8px; border-radius: 5px; background: #edf1ee; color: #60786a; }
+.decision-chip.reply { background: #deefe5; color: #285d40; }
+.decision-chip.observe { background: #fff0d9; color: #946819; }
+.observer-composer { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; border-top: 1px solid var(--border); padding: 20px 28px; font-size: 12px; color: #60786a; background: white; }
+.observer-composer a { margin-left: auto; color: var(--green); }
+.chat-debug-error { padding: 10px 24px; color: #946819; background: #fff5e9; margin: 0; font-size: 12px; }
+.modal .debug-detail { border: 0; max-height: 70vh; overflow: auto; }
+@media (max-width: 600px) { .observer-composer { padding: 12px 16px; } .chat-debug-note { max-width: 100%; } }

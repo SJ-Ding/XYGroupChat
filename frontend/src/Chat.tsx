@@ -24,6 +24,8 @@ import {
   Bot,
 } from "lucide-react";
 import AgentPage from "./AgentPage";
+import MessageDetails from "./MessageDetails";
+import { ChatAnnotation, useChatAnnotations } from "./ChatDebug";
 import HarnessPage from "./HarnessPage";
 import { Avatar, Modal, Empty } from "./components";
 import { api, post, time, base, clientId, identityUrl } from "./api";
@@ -43,6 +45,8 @@ export default function Chat({
   user: User;
   notify: (s: string) => void;
 }) {
+  const observer = user.username === "agent";
+  const [debugSelection, setDebugSelection] = useState<{source:number; keys?:string[]} | null>(null);
   const [messages, setMessages] = useState<Message[]>([]),
     [members, setMembers] = useState<User[]>([]),
     [panel, setPanel] = useState<Panel>(null),
@@ -110,6 +114,8 @@ export default function Chat({
   }, []);
   const settingsDirty = useRef(false);
   const [searchResults, setSearchResults] = useState<Message[]>([]);
+  const debugIds = [...new Set([...messages, ...searchResults].map(m => m.id))].sort((a,b)=>a-b).join(",");
+  const annotations = useChatAnnotations(debugIds, observer);
   useEffect(() => {
     let cancelled = false;
     const timer = setTimeout(() => {
@@ -317,10 +323,10 @@ export default function Chat({
       <nav className="rail" aria-label="主导航">
         <button
           className="profile"
-          title={user.name}
+          title={observer ? "Agent 聊天视角" : user.name}
           onClick={() => setPanel("members")}
         >
-          <Avatar id={user.id} name={user.name} small />
+          <Avatar id={observer ? 0 : user.id} name={user.name} small />
         </button>
         <div className="rail-links">
           {[
@@ -330,7 +336,7 @@ export default function Chat({
             ["memory", BookOpen, "家庭记忆"],
             ["tasks", ListTodo, "待办清单"],
             ["settings", Settings, "设置"],
-          ].map(([key, Icon, label]) => {
+          ].filter(([key]) => !observer || key === null).map(([key, Icon, label]) => {
             const C = Icon as typeof MessageCircle;
             return (
               <button
@@ -414,7 +420,7 @@ export default function Chat({
               <div>
                 <strong>
                   {m.name}
-                  {m.id === user.id && <em>我</em>}
+                  {!observer && m.id === user.id && <em>我</em>}
                 </strong>
                 <small>
                   <i className={m.online ? "dot online" : "dot"} />
@@ -455,7 +461,7 @@ export default function Chat({
           <header className="chat-header">
             <div>
               <h1>
-                我们一家 <span>4</span>
+                我们一家 <span>{observer ? "Agent 视角" : "4"}</span>
               </h1>
               <p>
                 <i className={`dot ${online ? "online" : ""}`} />
@@ -466,18 +472,19 @@ export default function Chat({
               </p>
             </div>
             <div className="header-actions">
-              <button
+              {!observer && <button
                 className={panel === "memory" ? "selected" : ""}
                 onClick={() => setPanel(panel === "memory" ? null : "memory")}
               >
                 <BookOpen size={18} />
                 <span>家庭记忆</span>
-              </button>
+              </button>}
               <button title="群成员" onClick={() => setPanel("members")}>
                 <Users size={21} />
               </button>
             </div>
           </header>
+          {observer && annotations.error && <p role="alert" className="chat-debug-error">分类信息连接中断：{annotations.error}。当前为上次成功记录。</p>}
           <div
             className="messages"
             onScroll={(e) => {
@@ -535,7 +542,7 @@ export default function Chat({
                 )}
                 <article
                   id={"message-" + m.id}
-                  className={`message ${m.user_id === user.id ? "mine" : ""} ${m.user_id === 0 ? "agent-message" : ""} ${highlight === m.id ? "highlight" : ""}`}
+                  className={`message ${(observer ? m.user_id === 0 : m.user_id === user.id) ? "mine" : ""} ${m.user_id === 0 ? "agent-message" : ""} ${highlight === m.id ? "highlight" : ""}`}
                 >
                   <Avatar id={m.user_id} name={m.name} />
                   <div className="message-body">
@@ -561,7 +568,8 @@ export default function Chat({
                         </button>
                       ))}
                     </div>
-                    {m.user_id === 0 && user.authenticated && (
+                    {observer && <ChatAnnotation agent={m.user_id === 0} annotation={annotations.rows[m.id]} open={(source,keys)=>setDebugSelection({source,keys})} />}
+                    {m.user_id === 0 && user.authenticated && !observer && (
                       <div className="harness-actions">
                         {[
                           ["helpful", "帮到我了"],
@@ -603,7 +611,7 @@ export default function Chat({
             )}
             <div ref={bottom} />
           </div>
-          <div className="composer">
+          {observer ? <div className="observer-composer"><Bot size={19}/><span>Agent 聊天视角 · 只读观察 · 分类每 2 秒更新</span><a href="/?user=child">切换为小宇聊天</a></div> : <div className="composer">
             <div className="composer-tools">
               <button
                 title="发送图片"
@@ -689,9 +697,10 @@ export default function Chat({
                 发送
               </button>
             </div>
-          </div>
+          </div>}
         </section>
       )}
+      {debugSelection && <Modal title="消息上下文与决策" close={()=>setDebugSelection(null)}><MessageDetails source={debugSelection.source} traceKeys={debugSelection.keys} onSource={(id)=>{setDebugSelection(null);source(id);}}/></Modal>}
       {panel && (
         <>
           <button
@@ -877,6 +886,7 @@ export default function Chat({
                       ["dad", "爸爸"],
                       ["mom", "妈妈"],
                       ["child", "小宇"],
+                      ["agent", "Agent 聊天视角"],
                     ].map(([id, name]) => (
                       <a
                         key={id}
