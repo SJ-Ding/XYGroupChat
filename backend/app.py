@@ -230,10 +230,15 @@ class MemoryBody(BaseModel):
     content: str = Field(min_length=1, max_length=2000)
 
 @app.get('/api/groups/{gid}/memories')
-def memories(gid: int, q: str = '', user=Depends(current)):
+def memories(gid: int, q: str = '', domain: Optional[str] = None, user=Depends(current)):
     access(gid, user)
     with DB() as db:
-        return search(db, gid, q, 50) if q else list_memories(db, gid)
+        if q:
+            return search(db, gid, q, 50, domain=domain)
+        mems = list_memories(db, gid)
+        if domain:
+            mems = [m for m in mems if m.get('domain', 'general') == domain]
+        return mems
 
 @app.post('/api/groups/{gid}/memories')
 async def add_memory(gid: int, body: MemoryBody, user=Depends(current)):
@@ -280,6 +285,23 @@ def revisions(gid: int, key: str, user=Depends(current)):
         if not old or old.data.get('scope') == 'private':
             raise HTTPException(404, '记忆不存在')
         return [r.data for r in records(db, 'revision', gid) if r.data['memory_key'] == key]
+
+@app.get('/api/groups/{gid}/members/{uid}/profile')
+def member_profile(gid: int, uid: int, domain: str = 'medical', user=Depends(current)):
+    access(gid, user)
+    from .memory import list_profile
+    with DB() as db:
+        # Verify membership (or personal space owner)
+        if gid >= 0 and not db.query(Member).filter_by(group_id=gid, user_id=uid).first():
+            raise HTTPException(404, '该成员不在此群内')
+        if gid < 0 and uid != -gid:
+            raise HTTPException(403, '只能查看本人的档案')
+        profiles = list_profile(db, gid, uid, domain)
+        grouped = {}
+        for p in profiles:
+            rt = (p.get('profile') or {}).get('record_type', 'other')
+            grouped.setdefault(rt, []).append(p)
+        return {'member_id': uid, 'domain': domain, 'profiles': profiles, 'grouped': grouped}
 
 class TaskBody(BaseModel):
     title: str = Field(min_length=1, max_length=500)

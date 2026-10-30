@@ -150,3 +150,19 @@ def migrate():
             upgrade_settings(db)
             db.execute(text('INSERT INTO schema_migrations VALUES (4, :now)'), {'now': time.time()})
             db.commit()
+    # Version 5 rebuilds memory_fts with a domain column for domain-aware retrieval.
+    # Legacy memories default to domain='general'; medical and future vertical
+    # domains coexist in the same index but can be filtered at query time.
+    with DB() as db:
+        if not db.execute(text('SELECT version FROM schema_migrations WHERE version=5')).first():
+            from .memory import index as _index, records as _records_old
+            # The FTS table needs to be rebuilt with the new domain column.
+            # SQLite FTS5 supports DROP TABLE; we recreate and reindex all memories.
+            db.execute(text('DROP TABLE IF EXISTS memory_fts'))
+            db.execute(text('CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts USING fts5(record_id UNINDEXED, group_id UNINDEXED, domain UNINDEXED, tokens)'))
+            db.commit()
+            # Reindex all existing memories with domain defaulting to 'general'.
+            from .memory import index_memory_records
+            index_memory_records(db)
+            db.execute(text('INSERT INTO schema_migrations VALUES (5, :now)'), {'now': time.time()})
+            db.commit()

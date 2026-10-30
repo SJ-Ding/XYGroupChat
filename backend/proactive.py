@@ -74,6 +74,57 @@ def event_candidate(db, gid, rule, now):
     return None
 
 
+def medical_followup_reminders(db, gid, now):
+    """Scan medical-domain memories for upcoming follow_up_date values.
+
+    When a follow-up is within 72 hours and no reminder has been created yet,
+    generate a one-time group reminder. This does NOT infer medication adherence
+    or dosing — it only surfaces the appointment time stored in the profile.
+    Returns a list of newly created message IDs.
+    """
+    import hashlib as _hashlib
+    events = []
+    for r in records(db, 'memory', gid):
+        d = r.data
+        if d.get('domain') != 'medical' or d.get('deleted') or d.get('status', 'active') != 'active':
+            continue
+        profile = d.get('profile') or {}
+        follow_up = profile.get('follow_up_date')
+        if not isinstance(follow_up, (int, float)):
+            continue
+        # Only create reminders for follow-ups within the next 72h window
+        if not (now - 3600 <= follow_up <= now + 72 * 3600):
+            continue
+        member_id = (d.get('subject_ids') or [0])[0] if d.get('subject_ids') else 0
+        reminder_key = f'medical_followup:{r.key}'
+        existing = get(db, 'reminder', gid, reminder_key)
+        if existing and existing.data.get('sent'):
+            continue
+        if existing and existing.data.get('status') == 'active':
+            continue
+        # Build a natural reminder content from the profile
+        parts = []
+        if profile.get('hospital'):
+            parts.append(profile['hospital'])
+        if profile.get('department'):
+            parts.append(profile['department'])
+        if profile.get('doctor'):
+            parts.append(profile['doctor'] + '医生')
+        location = '·'.join(parts) if parts else '医院'
+        from datetime import datetime as _dt
+        from zoneinfo import ZoneInfo as _ZI
+        local_time = _dt.fromtimestamp(follow_up, _ZI('Asia/Shanghai')).strftime('%m月%d日 %H:%M')
+        content = f'{local_time}有一次复诊（{location}）。记得带上医保卡和之前的药单。此提醒不表示需要服药。'
+        # Create or refresh the reminder; it fires at follow_up time
+        put(db, 'reminder', gid, reminder_key, {
+            'content': content, 'at': follow_up, 'sent': False,
+            'user_id': member_id, 'channel': 'group' if gid > 0 else 'personal',
+            'status': 'active', 'version': 1,
+            'category': 'medical_followup', 'source_memory': r.key
+        })
+    return events
+
+
 def schedule_tick(db, gid, now):
     events = []
     for r in records(db, 'reminder', gid):
@@ -164,6 +215,10 @@ def schedule_tick(db, gid, now):
         if candidate:
             d['seen_events'] = [*d.get('seen_events', []), candidate[0]][-100:]
         r.set(d)
+    # Proactive medical follow-up reminders: scan medical-domain memories for
+    # upcoming follow_up_date values. Create a one-time reminder 24h before the
+    # appointment if none exists yet. Does not infer medication adherence.
+    events.extend(medical_followup_reminders(db, gid, now))
     # Escalation is an explicit agreement about a missing confirmation, never
     # an inference that medication was not taken. Notify only the chosen inbox.
     for delivery in records(db, 'delivery', gid):

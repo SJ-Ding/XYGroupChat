@@ -2,10 +2,59 @@
 import json
 import os
 import re
+import time
+import socket
 import httpx
+import urllib.request as _urlreq
 from dotenv import load_dotenv
 
 load_dotenv()
+
+
+def _detect_proxy():
+    """探测可用的 HTTP 代理 URL，返回形如 'http://host:port' 的字符串。
+
+    在公司网络下，Python 进程直连外网会被防火墙拦截，必须走系统代理。
+    httpx 默认只读环境变量不读 Windows 注册表，所以这里显式探测。
+
+    探测顺序:
+      1. 环境变量 HTTP_PROXY/HTTPS_PROXY/http_proxy/https_proxy
+      2. Windows 系统代理 (urllib.request.getproxies()，读注册表/WPAD)，带重试
+      3. 已知公司代理兜底 (proxy.huawei.com:8080)，socket 探测可达性
+
+    返回 None 表示不使用代理（直连）。
+    """
+    # 1. 环境变量
+    for key in ("HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy"):
+        v = os.environ.get(key)
+        if v:
+            return v
+
+    # 2. Windows 系统代理（带重试，规避 PAC 探测时序问题）
+    for attempt in range(5):
+        try:
+            p = _urlreq.getproxies()
+        except Exception:
+            p = {}
+        if p.get("http") or p.get("https"):
+            return p.get("https") or p.get("http")
+        time.sleep(0.3)
+
+    # 3. 已知公司代理兜底：socket 快速探测，不通就放弃
+    for fallback in ("proxy.huawei.com:8080",):
+        host, _, port = fallback.partition(":")
+        try:
+            with socket.create_connection((host, int(port or 8080)), timeout=2):
+                return f"http://{fallback}"
+        except Exception:
+            pass
+
+    return None
+
+
+_PROXY = _detect_proxy()
+# Company proxy常是自签证书，关闭 SSL 验证以避免证书校验失败
+_VERIFY = False if _PROXY else True
 
 
 class ModelError(RuntimeError):
@@ -43,6 +92,17 @@ class Model:
     def __init__(self, transport=None):
         self.transport = transport
 
+    def _client(self):
+        """Build an AsyncClient with proxy only when no custom transport is set.
+
+        Tests pass a MockTransport; applying a proxy alongside a transport makes
+        httpx route through the real proxy instead of the mock. So proxy/verify
+        are only applied in production (no transport).
+        """
+        if self.transport is not None:
+            return httpx.AsyncClient(timeout=70, transport=self.transport)
+        return httpx.AsyncClient(timeout=70, proxy=_PROXY, verify=_VERIFY)
+
     async def call(self, messages, tools=None, structured=False):
         key = os.getenv('DEEPSEEK_API_KEY', '')
         if not key:
@@ -61,7 +121,7 @@ class Model:
         if structured:
             body['response_format'] = {'type': 'json_object'}
         usage, usage_complete = {}, True
-        async with httpx.AsyncClient(timeout=70, transport=self.transport) as client:
+        async with self._client() as client:
             # Only invalid structured outputs get one bounded retry. Never
             # retry HTTP errors or replay tools as part of format repair.
             for attempt in range(1, 3 if structured else 2):

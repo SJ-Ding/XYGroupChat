@@ -12,9 +12,15 @@ from zoneinfo import ZoneInfo
 from .db import Member, get, put, records
 from .memory import save_memory, index, visible
 
+# Sensitive keywords (including medical) are suppressed from automatic capture
+# unless the model explicitly classifies the memory as category='medical'.
+# This prevents casual mentions of "药" in daily plans from being captured as
+# medical memory, while still allowing structured medical extraction when the
+# model identifies a genuine medical fact (prescription, diagnosis, follow-up).
 SENSITIVE = re.compile(r'药|病|诊断|血压|血糖|身份证|密码|银行卡|验证码|抑郁|焦虑症|怀孕|过敏|体检')
+MEDICAL_CONTEXT = re.compile(r'挂号|就诊|复诊|药单|处方|科室|医院|医生')
 OPT_OUT = re.compile(r'别记|不要记|不用记|不必记|别保存|不要保存|别记录|不要记录|不需要记')
-CATEGORIES = {'preference','fact','plan','state','event'}
+CATEGORIES = {'preference','fact','plan','state','event','medical'}
 
 
 def normalized(value):
@@ -61,8 +67,14 @@ def transitions(known, deltas, latest=None, intent=None):
 
 
 def capture(db, gid, message, items, settings, now, known_keys=None):
-    if not settings.get('memory_auto',True) or OPT_OUT.search(message.content) or SENSITIVE.search(message.content):
+    if not settings.get('memory_auto',True) or OPT_OUT.search(message.content):
         return []
+    # Sensitive keywords (including medical) in the raw message require the
+    # model to explicitly classify extracted memory as category='medical' to
+    # pass. This prevents casual "拿药" in daily plans from being captured,
+    # while allowing genuine medical facts (diagnosis, prescription, follow-up)
+    # when the model identifies them as medical.
+    message_sensitive = bool(SENSITIVE.search(message.content))
     if gid < 0:
         groups={m.group_id for m in db.query(Member).filter_by(user_id=-gid).all()}
         members={m.user_id for m in db.query(Member).filter(Member.group_id.in_(groups)).all()} | {-gid}
@@ -78,10 +90,18 @@ def capture(db, gid, message, items, settings, now, known_keys=None):
             continue
         if not isinstance(content,str) or not content.strip() or len(content)>2000 or not math.isfinite(confidence) or confidence<.85:
             continue
-        if not isinstance(evidence,str) or not evidence.strip() or normalized(evidence) not in normalized(message.content) or SENSITIVE.search(content):
+        # Non-medical sensitive keywords in content are still suppressed.
+        # Medical keywords are allowed when category is medical.
+        if not isinstance(evidence,str) or not evidence.strip() or normalized(evidence) not in normalized(message.content):
             continue
         category = item.get('category','fact')
         if not isinstance(category,str) or category not in CATEGORIES:
+            continue
+        is_medical = category == 'medical'
+        # Suppress sensitive content unless the item is explicitly medical.
+        # When the raw message contains sensitive keywords (including medical),
+        # only medical-category items are allowed; non-medical items are dropped.
+        if not is_medical and (SENSITIVE.search(content) or message_sensitive):
             continue
         subject_ids = item.get('subject_ids') or [message.user_id]
         if not isinstance(subject_ids,list) or any(type(x) is not int or x not in members for x in subject_ids):
@@ -165,8 +185,12 @@ def capture(db, gid, message, items, settings, now, known_keys=None):
             subjects=[]
         before = old.data if old else None
         sources=sorted(set([o['source'] for o in observations]+(old.data.get('sources',[]) if old else [])))
+        # Medical memories use domain='medical' and carry structured profile data.
+        memory_domain = 'medical' if is_medical else 'general'
+        memory_profile = item.get('profile') if is_medical and isinstance(item.get('profile'), dict) else None
         r=save_memory(db,gid,content,sources,subjects,key=old.key if old else None,
             lifetime=lifetime,expires_at=expires,now=now,replace_automatic=operation=='update',
+            domain=memory_domain, profile=memory_profile,
             metadata={'category':category,'topic':topic,'topic_key':slot,'subject_ids':subject_ids,'tentative':tentative,
                 'eligible_long_term':eligible,'observations':observations,'first_observed_at':observations[0]['at'],
                 'last_observed_at':message.created,'status':'active','expiry_from_time':expiry_from_time})
@@ -197,7 +221,7 @@ def review(db, gid, settings, now):
         counts['reviewed']+=1
         observations=d.get('observations',[])
         days={datetime.fromtimestamp(o['at'],ZoneInfo('Asia/Shanghai')).date() for o in observations}
-        if settings.get('memory_auto',True) and not d.get('manual') and d.get('lifetime')=='short' and d.get('eligible_long_term') and not d.get('tentative') and d.get('category') in ('preference','fact') and len(days)>=3 and len({o['source'] for o in observations})>=3:
+        if settings.get('memory_auto',True) and not d.get('manual') and d.get('lifetime')=='short' and d.get('eligible_long_term') and not d.get('tentative') and d.get('category') in ('preference','fact','medical') and len(days)>=3 and len({o['source'] for o in observations})>=3:
             audit(db,r,'promote',now)
             r.set({**d,'lifetime':'long','expires_at':None,'promoted_at':now,'last_reviewed_at':now})
             index(db,r);counts['promoted']+=1
@@ -233,4 +257,6 @@ def status(db, gid, now):
     return {'active':len(active),'working':sum(m.get('lifetime')=='working' for m in active),
         'short':sum(m.get('lifetime')=='short' for m in active),
         'long':sum(m.get('lifetime','long')=='long' for m in active),
+        'general':sum(m.get('domain','general')=='general' for m in active),
+        'medical':sum(m.get('domain')=='medical' for m in active),
         'maintenance':state.data if state else None}

@@ -11,5 +11,6 @@ def clean_db():
     with engine.begin() as c:
         from sqlalchemy import text
         c.execute(text('DROP TABLE IF EXISTS memory_fts'))
+        c.execute(text('DROP TABLE IF EXISTS schema_migrations'))
     migrate()
     yield

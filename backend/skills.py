@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from typing import Callable
 from jsonschema import validate
 from .db import DB, Member, get, put, records
-from .memory import search, save_memory
+from .memory import search, save_memory, list_profile
 from .authorization import permitted
 from .skill_library import load_instructions
 
@@ -56,7 +56,8 @@ def schema(properties, required=()):
 
 async def memory_search(ctx, args):
     with DB() as db:
-        return search(db, ctx.group_id, args['query'], viewer_id=ctx.user_id if ctx.group_id < 0 else None, now=ctx.now)
+        return search(db, ctx.group_id, args['query'], viewer_id=ctx.user_id if ctx.group_id < 0 else None, now=ctx.now,
+            domain=args.get('domain'))
 
 async def skill_load(ctx, args):
     return load_instructions(args['name'])
@@ -69,9 +70,40 @@ async def remember(ctx, args):
         old = get(db, 'memory', ctx.group_id, key)
         if old:
             return {'key': old.key, **old.data}
-        r = save_memory(db, ctx.group_id, args['content'], [ctx.source_id] if ctx.source_id else [], key=key, manual=True, explicit=True)
+        domain = args.get('domain')
+        profile = args.get('profile')
+        r = save_memory(db, ctx.group_id, args['content'], [ctx.source_id] if ctx.source_id else [], key=key, manual=True, explicit=True,
+            domain=domain, profile=profile if isinstance(profile, dict) else None)
         db.commit()
         return {'key': r.key, **r.data}
+
+async def medical_profile(ctx, args):
+    """Read-only skill: fetch a member's structured medical profile.
+
+    Returns all medical-domain memories for the specified member, including
+    history, hospital preferences, preferred doctors, medications, and
+    follow-up dates. Used for vague booking commands (e.g. '帮我挂号' without
+    specifying a hospital) to retrieve prior medical context directly.
+    """
+    member_id = args.get('member_id')
+    if not isinstance(member_id, int):
+        return {'error': '需要指定成员ID'}
+    with DB() as db:
+        gid = ctx.group_id
+        # Verify the member belongs to this group (or personal space owner)
+        if gid >= 0 and not db.query(Member).filter_by(group_id=gid, user_id=member_id).first():
+            return {'error': '该成员不在此群内'}
+        if gid < 0 and member_id != -gid:
+            return {'error': '只能查看本人的医疗档案'}
+        profiles = list_profile(db, gid, member_id, 'medical', now=ctx.now)
+        if not profiles:
+            return {'member_id': member_id, 'profiles': [], 'message': '暂无该成员的医疗记忆'}
+        # Organize by record_type for structured consumption
+        grouped = {}
+        for p in profiles:
+            rt = (p.get('profile') or {}).get('record_type', 'other')
+            grouped.setdefault(rt, []).append(p)
+        return {'member_id': member_id, 'profiles': profiles, 'grouped': grouped}
 
 async def tasks(ctx, args):
     with DB() as db:
@@ -111,15 +143,17 @@ async def remind(ctx, args):
         db.commit()
     return {'key': key, 'scheduled': True}
 
-register(Skill('memory_search', '检索本家庭的记忆，返回来源消息。', schema({'query': {'type': 'string'}}, ['query']), memory_search))
-register(Skill('remember', '仅当用户明确要求记住信息时，保存家庭记忆。', schema({'content': {'type': 'string', 'maxLength': 2000}}, ['content']), remember, True))
+register(Skill('memory_search', '检索本家庭的记忆，返回来源消息。可通过 domain 参数限定搜索领域：general（日常）、medical（医疗）或不传（全部）。', schema({'query': {'type': 'string'}, 'domain': {'type': 'string', 'enum': ['general', 'medical']}}, ['query']), memory_search))
+register(Skill('remember', '仅当用户明确要求记住信息时，保存家庭记忆。可通过 domain 指定领域（general/medical），medical 领域可附带 profile 结构化数据。', schema({'content': {'type': 'string', 'maxLength': 2000}, 'domain': {'type': 'string', 'enum': ['general', 'medical']}, 'profile': {'type': 'object', 'properties': {'record_type': {'type': 'string', 'enum': ['history', 'hospital', 'doctor', 'medication', 'followup']}}, 'additionalProperties': True}}, ['content']), remember, True))
 register(Skill('family_tasks', '列出待办；仅在用户明确要求时创建或完成待办。due 使用 Unix 秒时间戳。', schema({'action': {'enum': ['list', 'create', 'complete']}, 'key': {'type': 'string'}, 'title': {'type': 'string', 'maxLength': 500}, 'owner_id': {'type': ['integer', 'null']}, 'due': {'type': ['number', 'null']}}, ['action']), tasks, True))
 register(Skill('group_reminder', '仅在用户明确要求时，创建一次性群内提醒。at 为 Unix 秒时间戳。', schema({'content': {'type': 'string', 'maxLength': 2000}, 'at': {'type': 'number'}}, ['content', 'at']), remind, True))
+register(Skill('medical_profile', '只读技能：查询指定成员的医疗档案（病史、就诊医院、偏好医生、药单、复诊时间）。用于模糊挂号等场景从记忆中读取医疗信息。', schema({'member_id': {'type': 'integer'}}, ['member_id']), medical_profile))
 
-REGISTRY['memory_search'].instructions = '先检索当前空间，自然使用命中的相关事实和近况，留意短期有效期和未确定的打算。找不到就坦诚说，不编造。不要抄录工具结果或逐条汇报确认状态；只有被问到出处时才解释来源。'
-REGISTRY['remember'].instructions = '保存明确要求记住的完整事实，保留否定条件。不可修改授权参数或改变可见空间。'
+REGISTRY['memory_search'].instructions = '先检索当前空间，自然使用命中的相关事实和近况，留意短期有效期和未确定的打算。可通过 domain 参数限定搜索领域：日常话题用 general，医疗话题用 medical。找不到就坦诚说，不编造。不要抄录工具结果或逐条汇报确认状态；只有被问到出处时才解释来源。'
+REGISTRY['remember'].instructions = '保存明确要求记住的完整事实，保留否定条件。不可修改授权参数或改变可见空间。医疗信息可通过 domain=medical 并附带 profile 结构化字段保存。'
 REGISTRY['family_tasks'].instructions = '先区分查看、创建和完成。完成使用已有待办编号；每项写入必须精确匹配授权。结果中有 error 时不得宣称完成。'
 REGISTRY['group_reminder'].instructions = '核对明确约定的内容和未来时间。周期、用药和接收对象通过提醒表单设置；不自行推断剂量和疗程。'
+REGISTRY['medical_profile'].instructions = '查询指定成员的医疗档案（病史、偏好医院、偏好医生、药单、复诊时间）。当用户发出模糊的医疗指令（如"帮我挂号"未指定医院）时，先用此技能读取该成员的历史医疗记忆，再自然地建议基于过往就诊记录的选项。不编造未记录的医疗信息。'
 
 def tools(allow_writes, grants=None, selected=None):
     result = []
