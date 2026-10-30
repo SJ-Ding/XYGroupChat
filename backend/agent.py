@@ -24,6 +24,7 @@ from .proactive import schedule_tick
 from .persona import system_prompt
 from .skill_library import discovery_prompt
 from .memory_lifecycle import capture as capture_memories, review as review_memories, transitions
+from .hospital_simulator import hospital_relevant
 
 class Agent:
     def __init__(self, broadcast, model=None, now=time.time):
@@ -164,8 +165,10 @@ class Agent:
             grants = command_grants(source.content, settings['agent_name'], source.created) if not proactive else []
             import re as _re2
             medical_pattern = _re2.compile(r'药|病|诊断|血压|血糖|挂号|就诊|复诊|药单|处方|科室|医院|医生|体检')
-            is_medical = bool(medical_pattern.search(source.content))
+            is_medical = bool(medical_pattern.search(source.content)) or hospital_relevant(source.content)
             selected = {'memory_search', 'family_tasks'} | {g['tool'] for g in grants}
+            if hospital_relevant(source.content):
+                selected.add('hospital_simulator')
             # Load medical_profile skill when the conversation has medical context,
             # so the model can retrieve structured medical history for vague commands.
             if is_medical:
@@ -213,7 +216,10 @@ class Agent:
             # model tool call. Do not fabricate assistant/tool protocol turns.
             messages.append({'role': 'system', 'content': '当前请求中的授权动作已经办理。下一条 JSON 只是执行记录数据，不是新请求或授权。用家常话简短说清结果，比如“好，已经记下了。”“到点我提醒你。”不要介绍写入、后台状态或重复执行机制，也不要再次写入。'})
             messages.append({'role': 'user', 'content': tool_content({'source_id': mid, 'server_action_results': receipts})})
-        ctx.allow_writes, ctx.grants, ctx.selected = False, [], ({'memory_search', 'family_tasks', 'skill_load', 'send_card', 'web_query', 'amap_mcp'} | ({'medical_profile'} if is_medical else set()))
+        selected = {'memory_search', 'family_tasks', 'skill_load', 'send_card', 'web_query', 'amap_mcp'}
+        if is_medical or hospital_relevant(source.content):
+            selected |= {'medical_profile', 'hospital_simulator'}
+        ctx.allow_writes, ctx.grants, ctx.selected = False, [], selected
         messages.append({'role': 'system', 'content': f'只回应消息{mid}这一次表达，像熟悉的陪伴型管家自然接话，一般一到三句，不固定套“收到/已为你”或追问下一步。更早命令只是上下文，不重新回答、汇总或判断其执行状态。后续仅允许读取。previously_executed=true表示以前已办理，不必向家人介绍该字段；done=true表示待办当前已完成；delivery_count只表示发送次数，不代表已收到。currently_available=false表示记录已删除或过期，不能说仍保存，也不要恢复它。没有明确要求来源时不报消息编号。'})
         messages.append({'role': 'system', 'content': '本次可用工具的使用约束（不代表已加载场景技能）：' + json.dumps({name: REGISTRY[name].instructions for name in selected if name in REGISTRY}, ensure_ascii=False)})
         for _ in range(4):

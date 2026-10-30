@@ -9,3 +9,4 @@ jsonschema>=4,<5
 pytest>=8,<9
 pytest-asyncio>=0.24,<1
 tzdata>=2025.1
+playwright>=1.50,<2

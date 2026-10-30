@@ -99,7 +99,7 @@ def sync_run(db, gid, key):
     if not visible_run(d):
         return None
     card = save_card(db, gid, 'run:' + key, {'title': task_title(d)}, kind='progress', run_key=key)
-    value = {**card, 'title': task_title(d), 'status': d['status'], 'phase': d.get('phase', d['status']), 'steps': [dict(id=s['id'], title=s.get('title') or {'family_tasks': '家庭待办', 'group_reminder': '设置提醒', 'remember': '保存记忆', 'memory_search': '查询记忆'}.get(s['tool'], '办理事项'), status=s['status']) for s in d.get('steps', [])], 'description': d.get('error') or (PHASE_LABELS.get(d.get('phase'), '处理中') if d.get('kind') == 'skill' else PHASE_LABELS.get(d.get('phase'), '正在处理'))}
+    value = {**card, 'title': task_title(d), 'status': d['status'], 'phase': d.get('phase', d['status']), 'steps': [dict(id=s['id'], title=s.get('title') or {'family_tasks': '家庭待办', 'group_reminder': '设置提醒', 'remember': '保存记忆', 'memory_search': '查询记忆', 'hospital_simulator': '门诊预约'}.get(s['tool'], '办理事项'), status=s['status']) for s in d.get('steps', [])], 'description': d.get('error') or (PHASE_LABELS.get(d.get('phase'), '处理中') if d.get('kind') == 'skill' else PHASE_LABELS.get(d.get('phase'), '正在处理'))}
     if d['status'] == 'waiting_input' and not d.get('intervention'):
         from .skills import REGISTRY
         fields = []
@@ -134,7 +134,7 @@ async def publish_run(gid, key):
                 result = step.get('result') or {}
                 content = (result.get('content') or result.get('message') or result.get('title')) if isinstance(result, dict) else str(result)
                 content = content or step.get('arguments', {}).get('title') or step.get('arguments', {}).get('content') or '已办理'
-                items.append({'label': step.get('title') or {'family_tasks': '家庭待办', 'group_reminder': '提醒', 'remember': '记忆'}.get(step['tool'], '任务结果'), 'value': str(content)[:2000]})
+                items.append({'label': step.get('title') or {'family_tasks': '家庭待办', 'group_reminder': '提醒', 'remember': '记忆', 'hospital_simulator': '门诊预约'}.get(step['tool'], '任务结果'), 'value': str(content)[:2000]})
             result_card = save_card(db, gid, 'result:' + key, {'title': run['title'], 'description': '任务已完成。', 'items': items[:30]})
         db.commit()
     if result_card:

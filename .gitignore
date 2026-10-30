@@ -235,4 +235,10 @@ __pycache__/
 data/
 frontend/node_modules/
 frontend/dist/
+frontend/.npm-cache/
+hospital/node_modules/
+hospital/dist/
+hospital/.npm-cache/
+*.tsbuildinfo
+.pytest-tmp/
 *.log

@@ -17,10 +17,12 @@ jsonschema-specifications==2025.9.1
 opentelemetry-api==1.45.1
 packaging==26.3
 pillow==11.3.0
+playwright==1.64.1
 pluggy==1.7.0
 pydantic==2.14.1
 pydantic-core==2.50.1
 pygments==2.21.0
+pyee==14.0.0
 pytest==8.4.2
 pytest-asyncio==0.26.0
 python-dotenv==1.2.4

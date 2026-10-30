@@ -31,6 +31,8 @@ cd XYGroupChat
 
 脚本安装依赖、构建前端、初始化数据库并启动服务。首次安装需要联网。若 PowerShell 限制执行脚本，可直接使用 `start.cmd`。
 
+模拟医院已作为项目内模块随主服务启动，地址为 `http://localhost:8000/hospital/`。在聊天中可直接说“打开模拟医院”或“帮我预约骨科上午的号”，小艺会通过 `hospital_simulator` 工具启动浏览器任务。预约会先停在核对页并发出确认卡片，只有当前用户点击“确认并继续”才会提交。实现与调试说明见 [hospital/README.md](hospital/README.md)。
+
 需要演示聊天与记忆时运行 `start.ps1 -Demo`，或手动 `python -m backend.demo`（需使用项目虚拟环境）。演示记录均带有 **【演示】** 标记，不会触发后台记忆提取。默认不添加虚构的家庭事实。
 
 局域网使用 `start.ps1 -Bind 0.0.0.0`，其他设备访问电脑的局域网 IP 和 8000 端口。手机与电脑需在同一网络。默认只监听本机；此版本不包含公网注册、HTTPS 网关或多进程部署。
@@ -106,6 +108,7 @@ Vite 在 5173 端口代理 `/api` 与 `/ws` 至 8000；生产构建由 FastAPI �
 - `backend/memory_lifecycle.py`：即时短期记忆、同事项更新、周期整理与审计；`backend/persona.py`：小艺的身份与陪伴风格。
 - `backend/skills.py`：可信 Skill 注册与执行协议；扩展说明见 `skills/family/SKILL.md`。
 - `frontend/src`：响应式聊天界面、记忆、待办、设置与成员切换。
+- `hospital`：虚构医院网页、预约数据与受限的 DOM 浏览器执行器。
 - `tests`：隔离临时数据库及模拟模型；不消耗真实模型额度。
 
 `data/family.db` 保存账号会话、群关系、消息、记忆和版本化应用记录，`data/uploads` 保存受群权限保护的图片。SQLite FTS5 是本地索引，无需 Redis、向量库或 Embedding 服务。迁移版本记录在 `schema_migrations`；后续表结构变更需增加显式迁移。备份请停止服务后复制整个 `data` 目录。

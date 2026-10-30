@@ -22,6 +22,7 @@ import {
   LockKeyhole,
   ArrowRight,
   Bot,
+  Stethoscope,
 } from "lucide-react";
 import { ConversationCard, TaskBar } from "./ConversationCard";
 import type { ChatCard, AgentTask } from "./types";
@@ -392,6 +393,15 @@ export default function Chat({
               </button>
             );
           })}
+          <button
+            title="打开模拟医院"
+            onClick={() =>
+              window.open("/hospital/", "_blank", "noopener,noreferrer")
+            }
+          >
+            <Stethoscope size={23} />
+            <span>模拟医院</span>
+          </button>
         </div>
         <button
           className="logout"

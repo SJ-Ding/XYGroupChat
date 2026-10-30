@@ -21,11 +21,20 @@ if ($LASTEXITCODE -ne 0) { throw "Python dependency installation failed." }
 if (-not (Test-Path -LiteralPath ".env")) { Copy-Item -LiteralPath ".env.example" -Destination ".env" }
 Push-Location frontend
 try {
-    npm ci
+    npm ci --cache .npm-cache
     if ($LASTEXITCODE -ne 0) { throw "npm ci failed." }
     npm run build
     if ($LASTEXITCODE -ne 0) { throw "Frontend build failed." }
 } finally { Pop-Location }
+Push-Location hospital
+try {
+    npm ci --cache .npm-cache
+    if ($LASTEXITCODE -ne 0) { throw "Hospital npm ci failed." }
+    npm run build
+    if ($LASTEXITCODE -ne 0) { throw "Hospital frontend build failed." }
+} finally { Pop-Location }
 if ($Demo) { & .\.venv\Scripts\python.exe -m backend.demo }
+$env:HOSPITAL_BASE = "http://127.0.0.1:$Port/hospital/"
 Write-Host "Xiaoyi: http://localhost:$Port (dad / mom / child)"
+Write-Host "Hospital simulator: http://localhost:$Port/hospital/"
 & .\.venv\Scripts\python.exe -m uvicorn backend.app:app --host $Bind --port $Port

@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Optional, List
 
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect, UploadFile, File, Depends
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel, Field
@@ -42,12 +42,15 @@ agent = Agent(broadcast)
 @asynccontextmanager
 async def lifespan(app):
     migrate()
+    from .hospital_simulator import set_event_loop, automation
+    set_event_loop(asyncio.get_running_loop())
     agent.stopped = False
     task = asyncio.create_task(agent.loop())
     yield
     task.cancel()
     await agent.close()
     await asyncio.gather(task, return_exceptions=True)
+    automation.shutdown()
 
 app = FastAPI(title='小艺 · 家庭聊天', lifespan=lifespan)
 
@@ -469,6 +472,28 @@ install_routes(app, current, access)
 DIST = Path(__file__).resolve().parent.parent / 'frontend' / 'dist'
 if DIST.exists():
     app.mount('/assets', StaticFiles(directory=DIST / 'assets'), name='assets')
+
+@app.get('/hospital')
+def hospital_root():
+    return RedirectResponse('/hospital/')
+
+
+@app.get('/hospital/')
+def hospital_index():
+    return hospital_app('')
+
+
+@app.get('/hospital/{path:path}')
+def hospital_app(path: str):
+    root = Path(__file__).resolve().parent.parent / 'hospital' / 'dist'
+    index = root / 'index.html'
+    if not index.exists():
+        raise HTTPException(503, '请先构建模拟医院：cd hospital; npm install; npm run build')
+    candidate = (root / path).resolve()
+    if path and candidate.is_relative_to(root.resolve()) and candidate.is_file():
+        return FileResponse(candidate)
+    return FileResponse(index)
+
 
 @app.get('/{path:path}')
 def index(path: str):
