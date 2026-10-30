@@ -10,6 +10,7 @@ from jsonschema import validate
 from .db import DB, Member, get, put, records
 from .memory import search, save_memory
 from .authorization import permitted
+from .skill_library import load_instructions
 
 @dataclass
 class SkillContext:
@@ -45,6 +46,11 @@ def schema(properties, required=()):
 async def memory_search(ctx, args):
     with DB() as db:
         return search(db, ctx.group_id, args['query'], viewer_id=ctx.user_id if ctx.group_id < 0 else None, now=ctx.now)
+
+async def skill_load(ctx, args):
+    return load_instructions(args['name'])
+
+register(Skill('skill_load', '按目录名称加载可信家庭场景技能正文；不执行业务动作、不增加权限。', schema({'name': {'type': 'string', 'maxLength': 64}}, ['name']), skill_load))
 
 async def remember(ctx, args):
     with DB() as db:
