@@ -173,6 +173,31 @@ def tools(allow_writes, grants=None, selected=None):
     return result
 
 async def execute(name, args, ctx):
+    from .execution_chain import start, finish, tool_title, reused_result
+    title = tool_title(name, args)
+    token = reused_result.set(False)
+    key = await start(ctx.group_id, ctx.source_id, ctx.task_key or ctx.run_id, 'skill' if name == 'skill_load' else 'tool', title)
+    try:
+        result = await _execute_tracked(name, args, ctx)
+    except HumanIntervention:
+        with DB() as db:
+            task = get(db, 'run', ctx.group_id, ctx.task_key) if ctx.task_key else None
+            status = task.data.get('status', 'waiting_input') if task else 'waiting_input'
+        await finish(ctx.group_id, key, status, '等待补充信息或授权')
+        reused_result.reset(token)
+        raise
+    except BaseException as exc:
+        await finish(ctx.group_id, key, 'cancelled' if isinstance(exc, asyncio.CancelledError) else 'failed', '操作已取消' if isinstance(exc, asyncio.CancelledError) else '工具执行失败')
+        reused_result.reset(token)
+        raise
+    reused = reused_result.get()
+    reused_result.reset(token)
+    failed = isinstance(result, dict) and 'error' in result
+    await finish(ctx.group_id, key, 'failed' if failed else 'succeeded', '工具未能完成，请核对任务信息' if failed else '使用已有结果' if reused else '技能说明已加载' if name == 'skill_load' else '查询已完成' if name in {'memory_search', 'web_query', 'amap_mcp', 'medical_profile'} else '操作已完成')
+    return result
+
+
+async def _execute_tracked(name, args, ctx):
     skill = REGISTRY.get(name)
     readonly = skill and (not skill.writes or (name == 'family_tasks' and args.get('action') == 'list'))
     if skill and not readonly:
@@ -218,6 +243,8 @@ async def _execute(name, args, ctx):
             old = get(db, 'tool', ctx.group_id, key)
             if old and not readonly:
                 if 'result' in old.data:
+                    from .execution_chain import reused_result
+                    reused_result.set(True)
                     return old.data['result']
                 return {'error': '上次写入结果不确定，需要核对，不能自动重放', 'uncertain': True}
             if not readonly:

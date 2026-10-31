@@ -430,6 +430,21 @@ def agent_status(gid: int, user=Depends(current)):
     access(gid, user)
     return snapshot(agent, gid)
 
+@app.get('/api/groups/{gid}/agent/chains')
+def agent_chains(gid: int, ids: str = '', user=Depends(current)):
+    access(gid, user)
+    if not user.get('observer'):
+        raise HTTPException(403, '仅 Agent 观察者可查看执行链路')
+    try:
+        selected = [int(value) for value in ids.split(',') if value]
+    except ValueError:
+        raise HTTPException(422, '消息编号格式不正确')
+    if len(selected) > 100:
+        raise HTTPException(422, '每次最多查询100条消息')
+    from .execution_chain import query
+    return query(gid, selected)
+
+
 @app.get('/api/groups/{gid}/agent/annotations')
 def agent_annotations(gid: int, ids: str = '', user=Depends(current)):
     access(gid, user)

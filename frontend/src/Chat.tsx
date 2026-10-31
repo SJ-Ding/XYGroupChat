@@ -36,6 +36,7 @@ import { ConversationCard, TaskBar } from "./ConversationCard";
 import type { ChatCard, AgentTask } from "./types";
 import AgentPage from "./AgentPage";
 import MessageDetails from "./MessageDetails";
+import { ExecutionChain, useExecutionChains } from "./ExecutionChain";
 import { ChatAnnotation, useChatAnnotations } from "./ChatDebug";
 import HarnessPage from "./HarnessPage";
 import { Avatar, Modal, Empty } from "./components";
@@ -156,6 +157,13 @@ export default function Chat({
   const [searchResults, setSearchResults] = useState<Message[]>([]);
   const debugIds = [...new Set([...messages, ...searchResults].map(m => m.id))].sort((a,b)=>a-b).join(",");
   const annotations = useChatAnnotations(debugIds, observer);
+  const chains = useExecutionChains(debugIds, observer);
+  const [chainFocus, setChainFocus] = useState<number | null>(null);
+  useEffect(() => {
+    if (chainFocus === null) return;
+    const el = document.getElementById("execution-chain-" + chainFocus) as HTMLDetailsElement | null;
+    if (el) { el.open = true; el.scrollIntoView({ block: "center" }); setChainFocus(null); }
+  }, [chainFocus, chains.rows]);
   useEffect(() => {
     let cancelled = false;
     const timer = setTimeout(() => {
@@ -597,6 +605,7 @@ export default function Chat({
             </div>
           </header>
           {!observer && <TaskBar tasks={agentTasks} locate={source} />}
+          {observer && chains.error && <p role="alert" className="chat-debug-error">执行链路更新中断：{chains.error}。保留上次成功记录，正在重连。</p>}
           {observer && annotations.error && <p role="alert" className="chat-debug-error">分类信息连接中断：{annotations.error}。当前为上次成功记录。</p>}
           <div
             className="messages"
@@ -688,6 +697,8 @@ export default function Chat({
                     {m.user_id === 0 && elder && m.content && !cards.some(c => c.message_id === m.id) && (
                       <button className="speak-btn" onClick={() => speak(m.content)}><Volume2 size={18} />念给我听</button>
                     )}
+                    {observer && m.user_id !== 0 && <ExecutionChain source={m.id} chain={chains.rows[m.id]} />}
+                    {observer && m.user_id === 0 && annotations.rows[m.id]?.source && <button className="chain-revisit" onClick={async ()=>{const id=annotations.rows[m.id].source!;await source(id);setChainFocus(id);}}>回看执行链路</button>}
                     {observer && <ChatAnnotation agent={m.user_id === 0} annotation={annotations.rows[m.id]} open={(source,keys)=>setDebugSelection({source,keys})} />}
                     {m.user_id === 0 && user.authenticated && !observer && (
                       <div className="harness-actions">

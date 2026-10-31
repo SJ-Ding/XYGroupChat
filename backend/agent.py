@@ -70,6 +70,25 @@ class Agent:
         put(db, 'log', gid, str(uuid.uuid4()), {'reason': reason, 'source': source, 'at': self.now()})
 
     async def send(self, gid, content, key, source_id=None):
+        if not source_id:
+            return await self._send(gid, content, key, source_id)
+        from .execution_chain import start, finish
+        task_key = key
+        if key.startswith('result:'):
+            with DB() as db:
+                matches = [r.key for r in records(db, 'run', gid) if key.startswith('result:' + r.key + ':')]
+                if matches:
+                    task_key = max(matches, key=len)
+        step = await start(gid, source_id, task_key, 'delivery', '发送回复')
+        try:
+            result = await self._send(gid, content, key, source_id)
+        except BaseException as exc:
+            await finish(gid, step, 'cancelled' if isinstance(exc, asyncio.CancelledError) else 'failed', '回复未能发送')
+            raise
+        await finish(gid, step, summary='回复已发送')
+        return result
+
+    async def _send(self, gid, content, key, source_id=None):
         with DB() as db:
             old = db.query(Message).filter_by(group_id=gid, user_id=0, client_id=key).first()
             if old:
@@ -198,6 +217,10 @@ class Agent:
             # Reply retries reuse the durable receipt without invoking even
             # the tool cache. An already finished action is never re-executed.
             result = saved['result'] if saved else await execute(grant['tool'], grant['arguments'], ctx)
+            if saved:
+                from .execution_chain import start, finish
+                reused = await start(gid, mid, run_id, 'reuse', '使用已有结果')
+                await finish(gid, reused, summary='已复用成功执行记录')
             with DB() as db:
                 if saved and isinstance(result, dict) and result.get('key'):
                     kind = {'remember': 'memory', 'family_tasks': 'task', 'group_reminder': 'reminder'}.get(grant['tool'])

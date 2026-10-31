@@ -2179,3 +2179,16 @@ small {
 .progress-spinner { animation: progress-rotate 1s linear infinite; }
 @keyframes progress-rotate { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .progress-spinner { animation: none; } }
+
+.execution-chain { margin-top: 10px; padding: 10px 12px; border: 1px solid #d8e4df; border-radius: 12px; background: #f6faf8; color: #34574d; max-width: 100%; font-size: 13px; overflow-wrap: anywhere; text-align: left; }
+.execution-chain summary { cursor: pointer; display: list-item; }
+.execution-chain summary span { margin-right: 8px; }
+.execution-chain summary span:last-child { color: #62766e; font-size: 12px; }
+.execution-chain ol { padding-left: 20px; max-height: 360px; overflow: auto; margin: 12px 0; }
+.execution-chain li { padding: 6px 0 6px 4px; }
+.execution-chain li > div { display: flex; gap: 12px; justify-content: space-between; }
+.execution-chain li p, .execution-chain > p { font-size: 12px; color: #62766e; margin: 4px 0; }
+.execution-chain li[data-status="failed"] { color: #a53b3b; }
+.execution-chain li[data-status="running"] { color: #176649; }
+.chain-revisit { margin-top: 8px; background: transparent; border: 0; color: #36765d; cursor: pointer; font-size: 12px; }
+.execution-chain summary:focus-visible, .chain-revisit:focus-visible { outline: 2px solid #36765d; outline-offset: 3px; }

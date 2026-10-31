@@ -198,7 +198,8 @@ class BackgroundTasks:
                 'parameters': {'type': 'object', 'properties': {'reason': {'type': 'string', 'maxLength': 500}}, 'required': ['reason'], 'additionalProperties': False}}}]
             self.update(gid, key, phase='thinking')
             await self.event(gid, key)
-            answer = await self.agent.call(gid, messages, tools=available)
+            from .execution_chain import model_call
+            answer = await model_call(self.agent, gid, d['source_id'], key, 'reply', messages, tools=available)
             latest_refs, latest_memory, conflicts = self.memories(gid, {**d, 'memory_refs': refs})
             if conflicts:
                 self.update(gid, key, status='waiting_input', phase='waiting_input', error='相关事实存在冲突，需要先核对记忆')

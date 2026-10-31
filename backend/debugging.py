@@ -33,7 +33,8 @@ async def traced_call(agent, gid, source, phase, messages, run_id=None, **kwargs
         put(db, 'trace', gid, key, evidence)
         db.commit()
     try:
-        response = await agent.call(gid, messages, **kwargs)
+        from .execution_chain import model_call
+        response = await model_call(agent, gid, source, run_id, phase, messages, **kwargs)
         # Structured analysis is itself the public result; generation has a narrow whitelist.
         evidence['response'] = ({k: copy.deepcopy(v) for k, v in response.items()
                                  if k in ('intent', 'new_need', 'updates', 'memory_updates', 'memories', 'reason')}
