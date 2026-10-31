@@ -551,48 +551,22 @@ async def on_message(agent, gid, message, *, intent=None, emergency_only=False):
 
 
 # ---------------------------------------------------------------- 主动发现：长辈说不舒服
-HINT_SYSTEM = '''你是家庭就医守护助手“小艺”的需求判断模块，只输出 JSON。
-判断长辈这句话是否是身体不适、值得提醒照护人（子女）帮忙看医生。不要诊断疾病，不要推荐药物。
-输出：{"is_health_need":true/false,"symptom":"简短症状","department":"建议科室（从给定科室中选）","hint":"给照护人的一句话提醒，口语、温暖、不超过45字，结尾问要不要帮看明天的号"}'''
-
-
 async def handle_need_hint(agent, message, speaker, text_):
-    now = democlock.now()
-    with DB() as db:
-        last = get(db, 'care_hint', GID, speaker)
-        if last and now - last.data.get('at', 0) < 2 * 3600:
-            return False
-        put(db, 'care_hint', GID, speaker, {'at': now, 'source': message.id})
-        db.commit()
-    trace = Trace(f'主动关怀 · {display(speaker)}说不舒服', message.id)
-    word, dept_name = symptom_of(text_)
-    await trace.step('rule', '旁听群聊：长辈提到身体不适（未@小艺）', f'“{text_[:40]}” → 症状关键词「{word}」')
-    history = [p['content'] for p in profile_of(speaker)][:3]
-    if history:
-        await trace.step('memory', f'读取医疗档案 · {real_name(speaker)}', '；'.join(history))
-    wx = await weather(trace) if re.search(r'阴|雨|变天|潮|冷|湿', text_) or dept_name == '骨科' else None
-    names = [d['name'] for d in H.catalog()['departments']]
-    result, err = await llm_json(agent, 'care_hint', HINT_SYSTEM, {
-        'speaker': f'{display(speaker)}（{real_name(speaker)}，{FAMILY[speaker]["age"]}岁）', 'message': text_,
-        'medical_history': history, 'weather': wx, 'departments': names, 'caregiver': display(CAREGIVER)})
-    hint = None
-    if result and result.get('is_health_need') is not False:
-        if result.get('department') in names:
-            dept_name = result['department']
-        hint = str(result.get('hint') or '').strip()[:80] or None
-        await trace.step('llm', f'大模型判断需求 · {model_name()}', f"症状：{result.get('symptom') or word} → 建议{dept_name}")
-    else:
-        await trace.step('rule', '需求判断（规则）', err or '模型认为不需要提醒，按规则保守提醒一次')
-    weather_part = f"，{wx['city']}今天{wx['weather']}" if wx and wx.get('weather') else ''
-    hint = hint or f'{display(CAREGIVER)}，{display(speaker)}说{word}不舒服{weather_part}，可能是旧伤反应。要我帮她看看明天上午{dept_name}的号吗？'
-    tomorrow = democlock.shift_date(democlock.today(), 1)
-    session = prefers_session(speaker) or 'morning'
-    await say(hint, f'care:hint:{message.id}')
-    await post_card(f'hint:{message.id}', 'need_hint', f'要帮{display(speaker)}看看{dept_name}的号吗？', {
-        'member': speaker, 'member_name': display(speaker), 'real_name': real_name(speaker), 'symptom': word,
-        'source_id': message.id, 'quote': text_[:60], 'department': dept_name, 'date': tomorrow, 'date_label': democlock.date_label(tomorrow),
-        'session': session, 'weather': wx, 'history': history[:2], 'for': CAREGIVER}, ['accept', 'dismiss'])
-    await trace.step('card', '推送「小艺建议」卡给照护人', f'{display(CAREGIVER)}点「好的」即可进入一句话挂号')
+    """Offer symptom Q&A without creating appointment cards or booking state."""
+    from .skill_library import load_instructions
+    skill = load_instructions('family-medical-qa')
+    trace = Trace('日常医疗问答', message.id)
+    await trace.step('skill', '加载 Skill · family-medical-qa', '先了解症状和危险信号，再给出日常建议')
+    result, err = await llm_json(agent, 'medical_qa',
+        skill['instructions'] + '\n只输出 JSON：{"reply":"给长辈的自然回复"}。', {
+            'message': text_, 'speaker': display(speaker),
+            'medical_history': [p['content'] for p in profile_of(speaker)][:3]})
+    reply = result.get('reply') if isinstance(result, dict) else None
+    if not isinstance(reply, str) or not reply.strip():
+        reply = ('现在具体哪里不舒服，是胀、烧心还是疼，持续多久了？仅凭这句话还不能判断原因。'
+                 '如果突然剧烈疼痛、胸痛气短、呕血或黑便，请立即就医，情况紧急拨打120；'
+                 '如果持续不缓解或反复出现，也应及时找医生评估。')
+    await say(reply.strip(), f'care:medical-qa:{message.id}')
     return True
 
 
@@ -617,6 +591,11 @@ async def handle_booking_request(agent, user_id, text_, *, source=None, speaker=
         await say('挂号服务暂时无法加载，请稍后重试。', f'care:skill-error:{source or trace.turn}')
         return None
     await trace.step('skill', '加载 Skill · family-appointment', '门诊预约方法：症状→科室对照、补全四要素、自动选号、支付前确认')
+    is_query = appointment_operation(text_ or '') == 'query' if query_only is None else query_only
+    if not is_query:
+        import sys
+        from .booking_agent import book
+        return await book(sys.modules[__name__], agent, user_id, text_, source, speaker, preset, trace, ctx)
     slots = {**rule_slots(text_ or '', speaker), **{k: v for k, v in (preset or {}).items() if v}}
     await trace.step('rule', '规则抽取槽位', '，'.join(f'{k}={v}' for k, v in slots.items() if v) or '未抽到明确槽位')
     reply = None

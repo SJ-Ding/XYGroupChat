@@ -1,3 +1,4 @@
+import json
 import uuid
 import pytest
 from backend.addressing import direct_mention, strip_assistant_address
@@ -56,6 +57,12 @@ class RoutingModel:
         self.operation=operation;self.quoted=quoted;self.calls=[]
     async def call(self,messages,structured=False,**kwargs):
         self.calls.append(messages)
+        if '决定本次预约' in messages[0]['content']:
+            payload=json.loads(messages[-1]['content'])
+            department=next(d for d in payload['catalog']['departments'] if d['name']=='骨科')
+            slot=next(s for s in payload['available_slots']
+                      if s['departmentId']==department['id'] and s['session']=='afternoon')
+            return {'patient':'mom','slot_id':slot['id'],'reason':'测试选择下午骨科号源'}
         if '挂号理解' in messages[0]['content']:
             return {'patient':'mom','department':'骨科','date':democlock.shift_date(democlock.today(),1),'session':'afternoon'}
         if structured:
@@ -84,26 +91,43 @@ def source(login,text,mention=None):
         return m
 
 @pytest.mark.asyncio
-async def test_original_utterance_loads_appointment_and_preserves_afternoon(family):
+async def test_original_utterance_uses_agent_and_preserves_afternoon(family,monkeypatch):
+    captured={}
+    async def fake_start(agent,user_id,option,meta,**kwargs):
+        captured.update(option=option,meta=meta)
+        return 'task'
+    monkeypatch.setattr(care,'start_booking',fake_start)
     model=RoutingModel();a=Agent(no_broadcast,model,now=democlock.now)
     m=source('mom','预定明天下午的号@小艺')
     await a.process(1,str(m.id))
-    card=care.cards_of('hospital_apps')[-1]
-    assert card['care']['data']['session']=='afternoon'
-    assert card['care']['data']['patient']=='mom'
+    assert captured['option']['session']=='afternoon'
+    assert captured['meta']['patient']=='mom'
+    assert not care.cards_of('hospital_apps')
     assert any('family-appointment' in s['label'] for turn in care.trace_list() for s in turn['steps'])
     assert not [call for call in model.calls if '家庭会话理解器' in call[0]['content']]
     await a.close()
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('operation,kind',[('query','hospital_options'),('book','hospital_apps')])
-async def test_semantic_scene_routes_paraphrases_without_fast_keywords(family,operation,kind):
+async def test_semantic_scene_routes_paraphrases_without_fast_keywords(family,monkeypatch,operation,kind):
+    captured={}
+    async def fake_start(agent,user_id,option,meta,**kwargs):
+        captured.update(option=option,meta=meta)
+        return 'task'
+    monkeypatch.setattr(care,'start_booking',fake_start)
     a=Agent(no_broadcast,RoutingModel(operation),now=democlock.now)
     m=source('child','妈妈膝盖这件事，明天下午给她安排一下@小艺')
     assert not appointment_operation(m.content)
     await a.process(1,str(m.id))
-    assert care.cards_of(kind)
-    assert not [r for r in care.cards_of('hospital_apps' if operation=='query' else 'hospital_options')]
+    if operation=='query':
+        assert care.cards_of(kind)
+        assert not care.cards_of('hospital_apps')
+        assert not captured
+    else:
+        assert captured['meta']['patient']=='mom'
+        assert captured['option']['session']=='afternoon'
+        assert not care.cards_of('hospital_apps')
+        assert not care.cards_of('hospital_options')
     with DB() as db:
         assert get(db,'job',1,str(m.id)).data['replied']
     await a.close()
@@ -112,8 +136,8 @@ async def test_semantic_scene_routes_paraphrases_without_fast_keywords(family,op
 async def test_missing_patient_gets_clarification_instead_of_silence(family):
     class UnknownPatient(RoutingModel):
         async def call(self,messages,**kwargs):
-            if '挂号理解' in messages[0]['content']:
-                return {'patient':None,'department':'骨科','date':None,'session':'afternoon'}
+            if '决定本次预约' in messages[0]['content']:
+                return {'question':'给妈妈还是爸爸预约？'}
             return await super().call(messages,**kwargs)
     a=Agent(no_broadcast,UnknownPatient(),now=democlock.now)
     m=source('child','预定明天下午的号@小艺')
@@ -159,9 +183,14 @@ async def test_explicit_reminder_bypasses_medical_plan_parser(family,monkeypatch
     await a.close()
 
 @pytest.mark.asyncio
-async def test_real_message_api_recognizes_trailing_mention(family):
+async def test_real_message_api_recognizes_trailing_mention(family,monkeypatch):
     import httpx
     from backend.app import app,agent as server_agent
+    captured={}
+    async def fake_start(agent,user_id,option,meta,**kwargs):
+        captured.update(option=option,meta=meta)
+        return 'task'
+    monkeypatch.setattr(care,'start_booking',fake_start)
     previous=server_agent.model
     server_agent.model=RoutingModel()
     try:
@@ -172,7 +201,8 @@ async def test_real_message_api_recognizes_trailing_mention(family):
             with DB() as db:
                 assert get(db,'job',1,str(mid)).data['mention']
             await server_agent.process(1,str(mid))
-            assert care.cards_of('hospital_apps')[-1]['care']['data']['session']=='afternoon'
+            assert captured['option']['session']=='afternoon'
+            assert captured['meta']['patient']=='mom'
     finally:
         await server_agent.close()
         server_agent.model=previous

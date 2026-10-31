@@ -3,6 +3,8 @@ name: family-appointment
 description: 查询两家独立模拟医院的科室号源，先让用户选择医院，再自动选号挂号，支付由本人确认。
 ---
 
+仅在用户明确要求查号或挂号时使用。单纯描述不适或询问病症原因时先使用 family-medical-qa，不将症状自动转换成预约请求。
+
 从当前可见 memory_search 和 medical_profile 补全患者、科室、日期和时段；缺患者或无法对应科室时追问。默认采用记忆偏好，其次未来可用日期、上午，并说明采用的偏好。不诊断。
 
 用户只问有没有号，调用 `hospital_simulator(action=query, department, date?, time?, preferred_time?, hospital_id?)`，只读返回号源和医院目录，不启动挂号。“明天下午四点的号有吗”等时间+号源问句也必须查询；结合当前就医上下文补科室，缺科室才追问。明确四点应传time=16:00，不能扩大为整个下午；没有匹配号源如实说明。医院名称和 ID 以目录为准，不虚构标识。

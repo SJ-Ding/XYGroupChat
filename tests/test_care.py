@@ -1,4 +1,6 @@
 """家人帮 · 就医守护编排测试：号源确定性、授权与支付、规则/大模型双通道、守护计划、依从性、急症拦截。"""
+import json
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -23,6 +25,17 @@ class CareModel:
     async def call(self, messages, tools=None, structured=False):
         system = messages[0]['content']
         self.calls.append(system[:20])
+        if '决定本次预约' in system and self.booking is not None:
+            payload = json.loads(messages[-1]['content'])
+            department = next(d for d in payload['catalog']['departments']
+                              if d['name'] == self.booking['department'])
+            candidates = [s for s in payload['available_slots']
+                          if s['departmentId'] == department['id']
+                          and (not self.booking.get('session') or s['session'] == self.booking['session'])]
+            if self.booking.get('date'):
+                candidates = [s for s in candidates if s['date'] == self.booking['date']]
+            return {'patient': self.booking['patient'], 'slot_id': candidates[0]['id'],
+                    'reason': '测试选择匹配的号源'}
         if '挂号理解' in system and self.booking is not None:
             return dict(self.booking)
         if '病历结构化' in system and self.plan is not None:
@@ -93,46 +106,41 @@ def test_booking_without_child_authorization_decrements_slot():
 
 
 @pytest.mark.asyncio
-async def test_one_sentence_booking_ranks_options_with_rules_only(monkeypatch):
+async def test_one_sentence_booking_uses_grounded_agent_slot(monkeypatch):
     captured = {}
     async def fake_start(agent, user_id, option, meta, **kwargs):
         captured.update(option=option, meta=meta)
         return "task"
     monkeypatch.setattr(care, "start_booking", fake_start)
-    a = make_agent()
+    booking = {'patient': 'mom', 'department': '骨科', 'date': democlock.shift_date(democlock.today(), 1),
+               'session': 'morning'}
+    a = make_agent(CareModel(booking=booking))
     m = message('child', '@小艺 帮我妈挂明天上午的号')
     assert await care.on_message(a, 1, m) is True
-    assert not captured
-    selection = care_cards('hospital_apps')[-1]
-    assert len(selection['care']['data']['hospitals']) == 2
-    with DB() as db:
-        uid = db.query(User).filter_by(username='child').first().id
-    await care.act_on_card(a, selection['id'], 'choose_hospital', {'option': H.campus('c-main')['hospitalId']}, uid)
-    assert not care_cards('hospital_options')
+    assert captured
     assert captured['meta']['patient'] == 'mom'
     assert captured['meta']['department'] == '骨科'
-    assert captured['option']['doctor'] == '张明远'
-    assert captured['option']['hospital_id']
+    assert captured['option']['session'] == 'morning'
+    assert captured['option']['date'] == booking['date']
     assert not captured['option']['needs_approval']
+    assert not care_cards('hospital_apps')
+    assert any('Agent 决定预约号源' in s['label'] for turn in care.trace_list() for s in turn['steps'])
 
 
 
 @pytest.mark.asyncio
-async def test_model_fills_slots_when_rules_cannot(monkeypatch):
+async def test_model_resolves_symptom_department_for_agent(monkeypatch):
     captured = {}
     async def fake_start(agent, user_id, option, meta, **kwargs):
         captured.update(meta)
         return "task"
     monkeypatch.setattr(care, "start_booking", fake_start)
-    model = CareModel(booking={'patient': 'dad', 'department': '心血管内科', 'date': None, 'session': 'morning',
-                               'reply': '好，给爸爸约心内科的号。'})
+    model = CareModel(booking={'patient': 'dad', 'department': '心血管内科',
+                               'date': democlock.shift_date(democlock.today(), 1),
+                               'session': 'morning'})
     a = make_agent(model)
     m = message('child', '@小艺 帮忙挂个号，最近头胀血压高')
     assert await care.on_message(a, 1, m) is True
-    selection = care_cards('hospital_apps')[-1]
-    with DB() as db:
-        uid = db.query(User).filter_by(username='child').first().id
-    await care.act_on_card(a, selection['id'], 'choose_hospital', {'option': H.campus('c-main')['hospitalId']}, uid)
     assert captured['patient'] == 'dad' and captured['department'] == '心血管内科'
     assert any(s['kind'] == 'llm' for turn in care.trace_list() for s in turn['steps'])
 
@@ -145,12 +153,14 @@ async def test_rules_reject_negation_and_non_medical_appointments():
 
 
 @pytest.mark.asyncio
-async def test_elder_symptom_creates_hint_once_per_two_hours():
-    a = make_agent()
-    assert await care.on_message(a, 1, message('mom', '今天阴天，膝盖又酸又胀')) is True
-    hint = care_cards('need_hint')[-1]['care']['data']
-    assert hint['department'] == '骨科' and hint['member'] == 'mom'
-    assert await care.on_message(a, 1, message('mom', '膝盖还是疼')) is False
+async def test_elder_symptom_uses_qa_without_booking_cards():
+    a = make_agent(CareModel())
+    for text in ('我吃完晚饭，感觉胃有点不舒服', '胃还是胀', '今天阴天，膝盖又酸又胀'):
+        assert await care.on_message(a, 1, message('mom', text)) is True
+    assert not care_cards('need_hint')
+    assert not care_cards('hospital_apps')
+    assert any('family-medical-qa' in str(s)
+               for turn in care.trace_list() for s in turn['steps'])
 
 
 @pytest.mark.asyncio

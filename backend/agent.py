@@ -157,7 +157,7 @@ class Agent:
             for m in messages:
                 content = [{'type': 'text', 'text': '[消息%d，%s，成员ID=%d] %s' % (m.id, names.get(m.user_id, settings['agent_name']), m.user_id, m.content)}]
                 # Only pass recent human images, bounded to avoid unbounded request size.
-                if m.user_id and m.id in [x.id for x in messages[-3:]]:
+                if m.user_id and m.id in [x.id for x in messages[-15:]]:
                     for key in json.loads(m.attachments)[:2]:
                         upload = get(db, 'upload', gid, key)
                         if upload:
@@ -193,7 +193,9 @@ class Agent:
             messages.append({'role': 'system', 'content': '为尚未得到回应的家庭需求准备一句自然、体贴的小帮助。不要说“检测到需求”或解释观察流程，不催家人、不替别人回答或承诺。只提一个眼下能帮上的具体帮助，不创建事项；无关回复不代表问题解决。'})
         with DB() as db:
             source = db.get(Message, mid)
-            grants = command_grants(source.content, settings['agent_name'], source.created) if not proactive else []
+            job = get(db, 'job', gid, str(mid))
+            command = (job.data.get('confirmed_command') if job else None) or source.content
+            grants = command_grants(command, settings['agent_name'], source.created) if not proactive else []
             import re as _re2
             medical_pattern = _re2.compile(r'药|病|诊断|血压|血糖|挂号|就诊|复诊|药单|处方|科室|医院|医生|体检')
             is_medical = bool(medical_pattern.search(source.content)) or hospital_relevant(source.content)
@@ -323,7 +325,7 @@ class Agent:
     async def analyze(self, gid, message):
         with DB() as db:
             waiting = [dict(key=r.key, **{k:v for k,v in r.data.items() if k in ('text','target','source','topic','version')}) for r in records(db, 'demand', gid) if r.data['status'] == 'waiting']
-            recent = db.query(Message).filter(Message.group_id == gid, Message.id <= message.id, Message.user_id != 0).order_by(Message.id.desc()).limit(15).all()[::-1]
+            recent = db.query(Message).filter(Message.group_id == gid, Message.id <= message.id).order_by(Message.id.desc()).limit(15).all()[::-1]
             settings = copy.deepcopy(get(db, 'group', gid, 'settings').data)
             known = list_memories(db, gid, -gid if gid < 0 else None, self.now())[-30:]
             names = {u.id: u.name for u in db.query(User).all()}
@@ -403,6 +405,7 @@ class Agent:
                 if not d.get('analyzed'):
                     analysis = await self.analyze(gid, message)
                     d['decision'] = analysis['decision']
+                    d['confirmed_command'] = analysis.get('confirmed_command')
                     # A confident semantic scene can route paraphrases missed by fast rules.
                     if d['decision']['action'] == 'reply':
                         from .care import on_message as care_message
