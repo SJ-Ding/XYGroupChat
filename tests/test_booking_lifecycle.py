@@ -64,7 +64,7 @@ async def test_start_message_waits_for_tool_and_failures_are_reported(monkeypatc
         async def say(text, key, **kw): events.append(text)
         monkeypatch.setitem(REGISTRY, 'hospital_simulator', replace(REGISTRY['hospital_simulator'], execute=provider))
         monkeypatch.setattr(care, 'say', say)
-        option = {'campus': '模拟医院', 'campus_id': 'c-main', 'doctor': '张明远', 'doctor_id': 'doc-g1',
+        option = {'campus': '江苏省人民医院', 'campus_id': 'c-jsph', 'doctor': '张明远', 'doctor_id': 'doc-g1',
             'date': democlock.today(), 'date_label': '今天', 'time': '08:30', 'session': 'morning', 'slot_id': 'test-slot'}
         meta = {'patient': 'mom', 'real_name': '王秀兰', 'department': '骨科', 'patient_id': 'p-001'}
         assert await care.start_booking(care.agent_ref(), care.ids()['child'], option, meta, origin_key='failure') is None
@@ -83,7 +83,7 @@ async def test_explicit_retry_restarts_failed_browser_without_replaying_existing
     monkeypatch.setattr(sim.automation, 'sessions', {})
     monkeypatch.setattr(sim, '_started_tasks', set())
     monkeypatch.setattr(sim, '_latest_tasks', {})
-    args = {'action': 'book', 'instruction': '重试预约骨科上午', 'hospital_id': H.campus('c-main')['hospitalId']}
+    args = {'action': 'book', 'instruction': '重试预约骨科上午', 'hospital_id': H.campus('c-jsph')['hospitalId']}
     key = sim._run_key(1, 1, args['instruction'], args['hospital_id'])
     old = sim._Session(key, 1, 1, key, {})
     old.status = 'failed'
@@ -110,7 +110,7 @@ async def test_explicit_retry_restarts_failed_browser_without_replaying_existing
     assert calls == [key]
     sim.automation.sessions.clear()
     with DB() as db:
-        slot_id = next(s['id'] for s in H.generate_slots() if s['campusId'] == 'c-main' and s['status'] == 'available')
+        slot_id = next(s['id'] for s in H.generate_slots() if s['campusId'] == 'c-jsph' and s['status'] == 'available')
         H.create_appointment(db, slot_id, 'p-001', key)
         db.commit()
     reconciled = await sim.hospital_simulator(ctx, args)

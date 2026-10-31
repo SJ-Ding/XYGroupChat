@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field
 
 from . import democlock
 from . import hospital_data as H
-from .care_seed import FAMILY, CAREGIVER, ELDERS, HOME, GID, day0
+from .care_seed import FAMILY, CAREGIVER, ELDERS, HOME, GID, PRIMARY_CAMPUS, day0
 from .db import DB, Message, User, get, put, records
 from .memory import save_memory, list_profile
 from .addressing import unquoted_text
@@ -61,6 +61,10 @@ def display(login):
 
 def real_name(login):
     return FAMILY.get(login, {}).get('real_name', display(login))
+
+
+def place_name(campus_id):
+    return H.place(campus_id) or (H.campus(campus_id) or {}).get('name', '模拟医院')
 
 
 def model_ready(agent):
@@ -347,7 +351,7 @@ async def distances(campus_ids, trace):
     source = _DIST_CACHE[campus_ids[0]][2]
     label = '高德地图 · maps_distance' + ('（启动时已预取）' if cached else '')
     await trace.step('tool', label if source == '高德地图' else '距离估算（高德未配置或不可用）', '；'.join(
-        f"家 → {H.campus(c)['name']} {_DIST_CACHE[c][0]:.1f}km / 驾车约{_DIST_CACHE[c][1]}分钟" for c in campus_ids), ms or 1)
+        f"家 → {place_name(c)} {_DIST_CACHE[c][0]:.1f}km / 驾车约{_DIST_CACHE[c][1]}分钟" for c in campus_ids), ms or 1)
     return {c: _DIST_CACHE[c] for c in campus_ids}
 
 
@@ -397,8 +401,8 @@ async def nearest_er(trace):
         await trace.step('tool', '高德地图 · maps_around_search', f"家附近急诊：{er['name']}（{er['address'] or '地址见地图'}）",
                          round((time.monotonic() - started) * 1000) or 1)
         return er
-    camp = H.campus('c-main')
-    km = _DIST_CACHE.get('c-main', _estimate(camp))[0]
+    camp = H.campus(PRIMARY_CAMPUS)
+    km = _DIST_CACHE.get(PRIMARY_CAMPUS, _estimate(camp))[0]
     await trace.step('tool', '附近急诊（本地兜底）', f"{camp['name']} 约{km:.1f}km（急诊信息未核实）")
     return {'name': camp['name'] + '（急诊信息未核实）', 'address': camp['address'], 'distance_km': round(km, 1), 'source': '演示数据'}
 
@@ -437,7 +441,7 @@ def option_from_slot(s, dist, visits, fam_doc, rank_note=''):
     if parts['continuity']:
         reasons.append(f'上次就是{doc["name"]}医生看的，熟悉病情')
     reasons.append(f"{s['startTime']} 还剩 {s['remaining']} 个号")
-    return {'id': s['id'], 'available': True, 'slot_id': s['id'], 'campus_id': camp['id'], 'campus': camp['name'],
+    return {'id': s['id'], 'available': True, 'slot_id': s['id'], 'campus_id': camp['id'], 'campus': place_name(camp['id']),
             'doctor_id': doc['id'], 'doctor': doc['name'], 'title': doc['title'], 'date': s['date'],
             'date_label': democlock.date_label(s['date']), 'session': s['session'], 'time': s['startTime'],
             'fee': s['price'], 'remaining': s['remaining'], 'distance_km': round(km, 1), 'eta_min': minutes,
@@ -489,7 +493,7 @@ async def build_options(login, dept_id, date, session, trace, *, ctx):
         visits = H.history_count(pid, cid)
         if not avail:
             km, minutes, source = dists[cid]
-            blocked.append({'id': 'none-' + cid, 'available': False, 'campus_id': cid, 'campus': H.campus(cid)['name'],
+            blocked.append({'id': 'none-' + cid, 'available': False, 'campus_id': cid, 'campus': place_name(cid),
                             'distance_km': round(km, 1), 'eta_min': minutes, 'distance_source': source, 'visits': visits,
                             'date_label': democlock.date_label(date), 'session': session,
                             'note': f"离家最近，但{democlock.date_label(date)}{session_label(session)}{dept['name']}已约满",
@@ -524,7 +528,8 @@ async def on_message(agent, gid, message, *, intent=None, emergency_only=False):
     if gid != GID or message.user_id == 0:
         return False
     text_ = unquoted_text(message.content).strip()
-    if not text_ or text_.startswith('【演示】'):
+    attachments = json.loads(message.attachments or '[]')
+    if (not text_ and not attachments) or text_.startswith('【演示】'):
         return False
     speaker = login_of(message.user_id)
     if speaker not in FAMILY:
@@ -536,7 +541,12 @@ async def on_message(agent, gid, message, *, intent=None, emergency_only=False):
         return True
     if emergency_only:
         return False
+    from . import care_aftercare
+    if attachments and await care_aftercare.handle_images(agent, message, speaker, text_, attachments):
+        return True
     if speaker in ELDERS and CHECKIN_RE.search(text_) and await handle_checkin_text(message, speaker):
+        return True
+    if await care_aftercare.handle_text_orders(agent, message, speaker, text_):
         return True
     operation = appointment_operation(text_)
     semantic = bool(intent and intent.kind == 'request' and not intent.quoted and intent.confidence >= .85
@@ -659,11 +669,12 @@ async def handle_booking_request(agent, user_id, text_, *, source=None, speaker=
             if filters.get('hospital_id') and campus.get('hospitalId') != filters['hospital_id']:
                 continue
             choices = [s for s in available if s['campusId'] == campus['id']]
+            label = H.place(campus['id']) or campus['name']
             if choices:
                 first = choices[0]
-                lines.append(f"{campus['name']}：{first['date']} {first['startTime']}，{H.doctor(first['doctorId'])['name']}，¥{first['price']}，余{first['remaining']}号")
+                lines.append(f"{label}：{first['date']} {first['startTime']}，{H.doctor(first['doctorId'])['name']}，¥{first['price']}，余{first['remaining']}号")
             else:
-                lines.append(f"{campus['name']}：暂无符合条件的号源")
+                lines.append(f"{label}：暂无符合条件的号源")
         requested = (slots.get('date') or '未来七天') + (' ' + slots['time'] if slots.get('time') else '')
         await say(dept['name'] + '模拟号源（' + requested + '）：\n' + '\n'.join(lines) + '。以上为模拟号源查询结果。', f'care:query:{source}', source=source)
         return None
@@ -793,7 +804,7 @@ async def on_booked(gid, run_key, appointment):
     who = next((k for k, v in FAMILY.items() if v['patient_id'] == appt['patientId']), 'mom')
     await say(f"锁号成功！{display(who)}的号已经占住了，15 分钟内付款就行 👇", f"care:locked:{appt['id']}")
     await post_card(f"pay:{appt['id']}", 'payment', '挂号费待支付', {
-        'hospital_id': appt.get('hospitalId', 'legacy-hospital'), 'appt_id': appt['id'], 'patient': who, 'patient_name': appt['patientName'], 'campus': appt['campusName'],
+        'hospital_id': appt.get('hospitalId', 'legacy-hospital'), 'appt_id': appt['id'], 'patient': who, 'patient_name': appt['patientName'], 'campus': place_name(appt['campusId']),
         'department': appt['deptName'], 'doctor': appt['doctorName'], 'title': appt['doctorTitle'], 'date': appt['date'],
         'date_label': democlock.date_label(appt['date']), 'time': appt['startTime'], 'fee': appt['fee'],
         'expires_at': appt['lock_expires'], 'pay_url': f"/hospital/apps/{appt['hospitalId']}/pay/{appt['id']}?t={H.pay_token(appt['id'])}" if appt.get('hospitalId') else f"/hospital/pay/{appt['id']}?t={H.pay_token(appt['id'])}",
@@ -810,20 +821,20 @@ async def on_paid(appt):
     visit_at = democlock.at(appt['date'], appt['startTime'])
     with DB() as db:
         put(db, 'reminder', GID, f"visit:{appt['id']}", {
-            'content': f"{display(who)}今天 {appt['startTime']} 在{appt['campusName']}{appt['deptName']}看{appt['doctorName']}医生，记得带医保卡和以前的病历。",
+            'content': f"{display(who)}今天 {appt['startTime']} 在{place_name(appt['campusId'])}{appt['deptName']}看{appt['doctorName']}医生，记得带医保卡和以前的病历。",
             'at': visit_at - 3600, 'sent': False, 'user_id': 0, 'channel': 'group', 'status': 'active', 'version': 1,
             'category': 'medical_visit', 'grace_seconds': 1800})
-        save_memory(db, GID, f"{real_name(who)}已预约{democlock.date_label(appt['date'])}{appt['startTime']}{appt['campusName']}{appt['deptName']}{appt['doctorName']}医生（已支付）",
+        save_memory(db, GID, f"{real_name(who)}已预约{democlock.date_label(appt['date'])}{appt['startTime']}{place_name(appt['campusId'])}{appt['deptName']}{appt['doctorName']}医生（已支付）",
                     [], [display(who)], key=f"visit-{appt['id']}", manual=True, explicit=True, domain='medical',
                     profile={'record_type': 'hospital', 'hospital': appt.get('hospitalName', appt['campusName']), 'hospital_id': appt.get('hospitalId', 'legacy-hospital'), 'campus': appt['campusName'], 'department': appt['deptName'],
                              'doctor': appt['doctorName'], 'doctor_id': appt['doctorId'], 'visit_date': visit_at, 'member_id': ids().get(who)},
                     metadata={'subject_ids': [ids().get(who)], 'category': 'medical'}, now=democlock.now())
         db.commit()
     await trace.step('memory', '写入就诊档案 + 就诊前 1 小时提醒', f"{real_name(who)} {appt['date']} {appt['startTime']} {appt['doctorName']}")
-    await say(f"{display(who)}的号挂好了 🎉 {democlock.date_label(appt['date'])} {appt['startTime']}，{appt['campusName']}{appt['deptName']}{appt['doctorName']}医生。"
+    await say(f"{display(who)}的号挂好了 🎉 {democlock.date_label(appt['date'])} {appt['startTime']}，{place_name(appt['campusId'])}{appt['deptName']}{appt['doctorName']}医生。"
               f"已加入日历，就诊前 1 小时我会提醒；看完病我也会继续盯着复诊和用药。", f"care:paid:{appt['id']}")
     await post_card(f"receipt:{appt['id']}", 'receipt', '挂号凭证', {
-        'hospital_id': appt.get('hospitalId', 'legacy-hospital'), 'appt_id': appt['id'], 'patient_name': appt['patientName'], 'campus': appt['campusName'], 'department': appt['deptName'],
+        'hospital_id': appt.get('hospitalId', 'legacy-hospital'), 'appt_id': appt['id'], 'patient_name': appt['patientName'], 'campus': place_name(appt['campusId']), 'department': appt['deptName'],
         'doctor': appt['doctorName'], 'title': appt['doctorTitle'], 'date': appt['date'], 'date_label': democlock.date_label(appt['date']),
         'time': appt['startTime'], 'fee': appt['fee'], 'paid_at': appt.get('paid_at'), 'address': H.campus(appt['campusId'])['address'],
         'calendar_url': f"/api/care/calendar/{appt['id']}.ics", 'reminder': '就诊前 1 小时提醒'}, ['calendar'], status='done')
@@ -848,7 +859,7 @@ def ensure_demo_appointment():
     if appt:
         return appt, False
     tomorrow = democlock.shift_date(democlock.today(), 1)
-    slots = [s for s in H.find_slots('d-guke', tomorrow, 'morning', 'c-main', 'doc-g1') if s['status'] == 'available']
+    slots = [s for s in H.find_slots('d-guke', tomorrow, 'morning', PRIMARY_CAMPUS, 'doc-g1') if s['status'] == 'available']
     with DB() as db:
         appt = H.create_appointment(db, slots[0]['id'], 'p-001', 'demo-fallback-' + tomorrow, 'tk-demo')
         appt.update(pay_status='paid', paid_at=democlock.now())
@@ -917,7 +928,7 @@ async def complete_visit(agent):
     await say(f"{display(who)}看完了。根据{emr['doctor']}医生的医嘱，我整理了一份两周守护计划，你看看合不合适：", f"care:visit:{appt['id']}")
     await post_card(f"plan:{appt['id']}", 'care_plan', '就诊后守护计划', {
         'hospital_id': appt.get('hospitalId', 'legacy-hospital'), 'appt_id': appt['id'], 'patient': who, 'patient_name': display(who), 'real_name': real_name(who),
-        'source': f"{appt['campusName']} · {emr['department']} · {emr['doctor']} · 电子病历", 'diagnosis': plan['diagnosis'],
+        'source': f"{place_name(appt['campusId'])} · {emr['department']} · {emr['doctor']} · 电子病历", 'diagnosis': plan['diagnosis'],
         'summary': plan.get('summary'), 'advice': emr['advice'], 'items': rows, 'follow_date': follow_date,
         'doctor_id': appt['doctorId'], 'campus_id': appt['campusId'], 'dept_id': appt['deptId'],
         'extracted_by': 'llm' if by_llm else 'rule'},
@@ -929,32 +940,47 @@ async def complete_visit(agent):
 def confirm_plan_items(card):
     d = card['care']['data']
     visit = next((a for a in H.appointments() if a['id'] == d['appt_id']), None)
-    start = visit['date'] if visit else democlock.today()
+    start = d.get('start') or (visit['date'] if visit else democlock.today())
     who = d['patient']
+    story = d.get('simulate_misses', True)
+    expanded, by_time = [], {}
+    for row in d.get('items') or []:
+        if not row.get('enabled', True):
+            continue
+        if row['type'] == 'medication' and row.get('times'):
+            for clock in row['times']:
+                if clock in by_time:
+                    by_time[clock]['title'] = (by_time[clock]['title'] + ' + ' + row['title'])[:80]
+                    by_time[clock]['detail'] = (by_time[clock]['detail'] + '；' + row.get('detail', ''))[:160]
+                    by_time[clock]['days'] = max(by_time[clock].get('days', 7), row.get('days', 7))
+                else:
+                    by_time[clock] = {**row, 'key': 'med-' + clock.replace(':', ''), 'clock': clock, 'times': None}
+                    expanded.append(by_time[clock])
+        else:
+            expanded.append(row)
     created = []
     with DB() as db:
-        for row in d['items']:
-            if not row.get('enabled', True):
-                continue
-            key = f"plan-{d['appt_id']}-{row['type']}"
+        for row in expanded:
+            key = f"plan-{d['appt_id']}-{row.get('key') or row['type']}"
             if row['type'] in ('medication', 'rehab'):
                 days = row.get('days', 14)
-                misses = [democlock.shift_date(start, 4)] if row['type'] == 'medication' else [democlock.shift_date(start, 3), democlock.shift_date(start, 8)]
+                misses = ([democlock.shift_date(start, 4)] if row['type'] == 'medication'
+                          else [democlock.shift_date(start, 3), democlock.shift_date(start, 8)]) if story else []
                 put(db, 'care_item', GID, key, {'key': key, 'member': who, 'type': row['type'], 'title': row['title'], 'detail': row['detail'],
                     'clock': row['clock'], 'start': start, 'end': democlock.shift_date(start, days - 1), 'status': 'active',
                     'source': d['source'], 'miss_dates': misses, 'plan': d['appt_id']})
             else:
                 put(db, 'care_item', GID, key, {'key': key, 'member': who, 'type': 'followup', 'title': row['title'], 'detail': row['detail'],
                     'date': row['date'], 'clock': '08:30', 'status': 'active', 'source': d['source'], 'plan': d['appt_id'],
-                    'doctor_id': d['doctor_id'], 'campus_id': d['campus_id'], 'dept_id': d['dept_id'],
+                    'doctor_id': d.get('doctor_id'), 'campus_id': d.get('campus_id'), 'dept_id': d.get('dept_id'),
                     'briefing_at': democlock.at(democlock.shift_date(row['date'], -1), '20:00'), 'briefing_sent': False, 'visit_start': start})
                 save_memory(db, GID, f"{real_name(who)}{democlock.date_label(row['date'])}需要复诊（{row['detail']}）", [], [display(who)],
-                            key=f"followup-{d['appt_id']}", manual=True, explicit=True, domain='medical',
+                            key=f"followup-{d['appt_id']}-{row.get('key', 'followup')}", manual=True, explicit=True, domain='medical',
                             profile={'record_type': 'followup', 'follow_up_date': democlock.at(row['date'], '08:30'), 'member_id': ids().get(who)},
                             metadata={'subject_ids': [ids().get(who)], 'category': 'medical'}, now=democlock.now())
             if row['type'] == 'medication':
                 save_memory(db, GID, f"{real_name(who)}正在服用{row['title']}（{row['detail']}），{d['source']}", [], [display(who)],
-                            key=f"med-{d['appt_id']}", manual=True, explicit=True, domain='medical',
+                            key=f"med-{d['appt_id']}-{row.get('key', row['clock'])}", manual=True, explicit=True, domain='medical',
                             profile={'record_type': 'medication', 'medications': [{'name': row['title'], 'frequency': row['detail']}], 'member_id': ids().get(who)},
                             metadata={'subject_ids': [ids().get(who)], 'category': 'medical'}, now=democlock.now())
             created.append(row)
@@ -1545,7 +1571,7 @@ def calendar_ics(appt_id):
         'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//xiaoyi//family//CN', 'BEGIN:VEVENT', f'UID:{appt_id}@xiaoyi',
         f'DTSTART;TZID=Asia/Shanghai:{fmt(start)}', f'DTEND;TZID=Asia/Shanghai:{fmt(end)}',
         f"SUMMARY:{appt['patientName']} · {appt['deptName']} {appt['doctorName']}",
-        f"LOCATION:{appt['campusName']}（{H.campus(appt['campusId'])['address']}）",
+        f"LOCATION:{place_name(appt['campusId'])}（{H.campus(appt['campusId'])['address']}）",
         f"DESCRIPTION:预约编号 {appt_id}，请提前 15 分钟到院取号。",
         'BEGIN:VALARM', 'TRIGGER:-PT60M', 'ACTION:DISPLAY', 'DESCRIPTION:就诊提醒', 'END:VALARM',
         'END:VEVENT', 'END:VCALENDAR', ''])
@@ -1585,13 +1611,6 @@ def install_routes(app, current, access, agent):
     @app.post('/api/care/cards/{card_id}/act')
     async def care_act(card_id: str, body: ActBody, user=Depends(current)):
         access(GID, user)
-        with DB() as db:
-            record = get(db, 'card', GID, card_id)
-            if record and record.data.get('care', {}).get('data', {}).get('prognosis'):
-                from .prognosis import activate
-                result = activate(db, GID, record.data, body.action, body.enabled, user['id'])
-                db.commit()
-                return result
         payload = {'option': body.option, 'enabled': body.enabled}
         return await act_on_card(agent, card_id, body.action, payload, user['id'])
 

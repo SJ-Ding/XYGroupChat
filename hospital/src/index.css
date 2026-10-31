@@ -2,28 +2,37 @@
 @tailwind components;
 @tailwind utilities;
 
+/* 主题色由当前医院配置注入（见 App.tsx 的 SiteLayout），两家医院共用一套模板 */
+:root { --h-primary: #0B4F9C; --h-deep: #083A75; --h-accent: #E8A317; --h-soft: #EAF2FC; --h-ink: #1F2D3D; --h-sub: #5F6B7A; --h-line: #E3E8EF; }
 html, body, #root { height: 100%; }
 body {
   margin: 0;
-  font-family: 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
-  background: #F6F8FB;
-  color: #243746;
+  font-family: 'PingFang SC', 'Microsoft YaHei', 'Source Han Sans SC', system-ui, sans-serif;
+  background: #F4F6F9;
+  color: var(--h-ink);
   -webkit-font-smoothing: antialiased;
 }
 *::-webkit-scrollbar { width: 8px; height: 8px; }
 *::-webkit-scrollbar-track { background: transparent; }
-*::-webkit-scrollbar-thumb { background: rgba(23,106,155,.2); border-radius: 8px; }
+*::-webkit-scrollbar-thumb { background: rgba(0,0,0,.15); border-radius: 8px; }
 
 @layer components {
-  .h-card { @apply rounded-xl bg-white shadow-sm; border: 1px solid #E2E8F0; }
-  .h-btn { @apply inline-flex items-center justify-center gap-2 rounded-lg font-medium transition select-none; }
-  .h-btn-primary { @apply h-btn text-white; background: #176A9B; }
-  .h-btn-primary:hover { background: #145A84; }
+  .wrap { @apply mx-auto px-6; max-width: 1200px; }
+  .h-card { @apply rounded-lg bg-white; border: 1px solid var(--h-line); box-shadow: 0 1px 2px rgba(15,35,60,.04); }
+  .h-btn { @apply inline-flex items-center justify-center gap-2 rounded font-medium transition select-none; }
+  .h-btn-primary { @apply h-btn text-white; background: var(--h-primary); }
+  .h-btn-primary:hover { background: var(--h-deep); }
   .h-btn-primary:active { transform: scale(.98); }
   .h-btn-primary:disabled { opacity: .5; cursor: not-allowed; }
-  .h-btn-ghost { @apply h-btn; background: #EFF7FC; color: #176A9B; border: 1px solid #D6E8F2; }
-  .h-btn-ghost:hover { background: #DDEDF7; }
-  .h-chip { @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium; }
-  .h-input { @apply w-full rounded-lg border bg-white px-3.5 py-2.5 outline-none transition; border-color: #CBD5E1; }
-  .h-input:focus { border-color: #176A9B; box-shadow: 0 0 0 3px rgba(23,106,155,.12); }
+  .h-btn-ghost { @apply h-btn; background: #fff; color: var(--h-primary); border: 1px solid var(--h-primary); }
+  .h-btn-ghost:hover { background: var(--h-soft); }
+  .h-chip { @apply inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium; }
+  .h-input { @apply w-full rounded border bg-white px-3.5 py-2.5 outline-none transition; border-color: #CBD5E1; }
+  .h-input:focus { border-color: var(--h-primary); box-shadow: 0 0 0 3px rgba(11,79,156,.10); }
+  .h-title { @apply flex items-center gap-2 font-semibold; color: var(--h-deep); font-size: 18px; }
+  .h-title::before { content: ''; width: 4px; height: 18px; border-radius: 2px; background: var(--h-primary); }
+  .h-more { @apply ml-auto text-sm font-normal; color: var(--h-sub); }
+  .t-primary { color: var(--h-primary); }
+  .bg-primary { background: var(--h-primary); }
+  .bg-soft { background: var(--h-soft); }
 }

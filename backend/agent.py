@@ -25,7 +25,6 @@ from .persona import system_prompt
 from .skill_library import discovery_prompt
 from .memory_lifecycle import capture as capture_memories, review as review_memories, transitions
 from .hospital_simulator import hospital_relevant
-from . import prognosis
 
 class Agent:
     def __init__(self, broadcast, model=None, now=time.time):
@@ -255,7 +254,7 @@ class Agent:
             messages.append({'role': 'user', 'content': tool_content({'source_id': mid, 'server_action_results': receipts})})
         selected = {'memory_search', 'family_tasks', 'skill_load', 'send_card', 'web_query', 'amap_mcp'}
         if is_medical or hospital_relevant(source.content):
-            selected |= {'medical_profile', 'hospital_simulator', 'family_health', 'prognosis_guard'}
+            selected |= {'medical_profile', 'hospital_simulator', 'family_health'}
         ctx.allow_writes, ctx.grants, ctx.selected = False, [], selected
         messages.append({'role': 'system', 'content': f'只回应消息{mid}这一次表达，先说明本次请求的结果、正在进行的步骤或需要补充的关键信息，避免仅回复“收到”却没有推进；像熟悉的陪伴型管家自然接话，一般一到三句，不固定套“收到/已为你”或追问下一步。更早命令只是上下文，不重新回答、汇总或判断其执行状态。明确请求先使用已加载能力推进；信息足够时不再重复问是否需要办理，缺关键信息时只追问尚缺的内容。仅询问号源时只查询，办理时先由用户选医院；没有实际工具结果不能说成功。执行工具必须遵守各工具的权限和卡片确认边界，不能将理解意图当作写入授权。previously_executed=true表示以前已办理，不必向家人介绍该字段；done=true表示待办当前已完成；delivery_count只表示发送次数，不代表已收到。currently_available=false表示记录已删除或过期，不能说仍保存，也不要恢复它。没有明确要求来源时不报消息编号。'})
         messages.append({'role': 'system', 'content': '本次可用工具的使用约束（不代表已加载场景技能）：' + json.dumps({name: REGISTRY[name].instructions for name in selected if name in REGISTRY}, ensure_ascii=False)})
@@ -386,11 +385,8 @@ class Agent:
                     from .care import on_message as care_message
                     self.executions[execution]['phase'] = 'care'
                     try:
-                        # Urgent rules always precede a pending model-led clarification.
+                        # Urgent rules always precede aftercare and booking work.
                         d['care_handled'] = bool(await care_message(self, gid, message, emergency_only=True))
-                        explicit_reminder = reminder_request(message.content, settings['agent_name'], message.created)
-                        if not d['care_handled'] and not explicit_reminder:
-                            d['care_handled'] = bool(await prognosis.handle_request(self, gid, message))
                         if not d['care_handled']:
                             d['care_handled'] = bool(await care_message(self, gid, message))
                     except Exception as exc:  # noqa: BLE001 - 编排失败时回到通用流程

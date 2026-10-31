@@ -233,7 +233,7 @@ class AppointmentManager:
 
     @staticmethod
     def _pause():
-        return 1500
+        return max(1500, int(os.getenv("HOSPITAL_STEP_PAUSE", "1500")))
 
     def _launch(self, pw):
         headless = os.getenv("HOSPITAL_HEADLESS", "").lower() in ("1", "true", "yes")
@@ -320,7 +320,8 @@ class AppointmentManager:
         page.wait_for_selector('[data-testid^="dept-"]', timeout=15000)
         self._announce(page, "打开模拟医院 · 预约挂号", session)
         page.wait_for_timeout(self._pause())
-        self._act(page, f"campus-{camp['id']}", f"选择院区：{camp['name']}", session)
+        # 目标医院页面每院只有一个院区，院区由当前应用身份确定。
+        self._announce(page, f"确认医院应用：{camp['name']}", session)
         self._act(page, f"dept-{dept['id']}", f"选择科室：{dept['name']}", session)
         page.wait_for_url(re.compile(r"/appointment/schedule"), timeout=15000)
         self._act(page, f"date-{c['date']}", f"选择日期：{c['date']}", session)
@@ -602,7 +603,8 @@ async def hospital_simulator(ctx, args):
                   and (not args.get('doctor_id') or s['doctorId'] == args['doctor_id'])
                   and (not args.get('time') or s['startTime'] == args['time'])
                   and (not args.get('preferred_time') or s['session'] == ('morning' if args['preferred_time'] == '上午' else 'afternoon'))]
-        return {"slots": result, "simulated": True, "hospitals": H.catalog().get('hospitals', []),
+        visible_hospitals = [h for h in H.hospitals() if not args.get('hospital_id') or h['id'] == args['hospital_id']]
+        return {"slots": result, "simulated": True, "hospitals": visible_hospitals,
                 "query": {"department": dept['name'], "dates": dates,
                     **{key: args[key] for key in ('date', 'time', 'preferred_time', 'hospital_id', 'campus_id', 'doctor_id') if args.get(key)}}}
     if action == "open":

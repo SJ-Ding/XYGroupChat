@@ -1,24 +1,32 @@
 // ============================================================
-// 模拟医院数据模型 —— 全部虚构，仅演示用
-// 院区/科室/医生/就诊人来自 catalog.json（与小艺后端共用一份）；
-// 号源、预约、支付、病历由后端 /api/hospital 统一提供，保证刷新不变、预约真实扣减。
+// 模拟医院数据模型 —— 演示用
+// 医院名称、地址来自高德地图公开数据；科室排班、医生、号源、病历均为虚构。
+// 医院/院区/科室/医生/就诊人来自 catalog.json（与小艺后端共用一份）；
+// 号源、预约、病历由后端 /api/hospital 统一提供，保证刷新不变、预约真实扣减。
 // ============================================================
 import catalog from './catalog.json';
 
-// Independent app identity comes from the URL, so tabs never share hospital selection.
-export const HOSPITALS = catalog.hospitals;
-const appMatch = window.location.pathname.match(/^\/hospital\/apps\/([^/]+)/);
-export const ACTIVE_HOSPITAL = HOSPITALS.find((h) => h.id === appMatch?.[1]);
-export const APP_BASE = ACTIVE_HOSPITAL ? `/hospital/apps/${ACTIVE_HOSPITAL.id}` : '/hospital';
-export const HOSPITAL_NAME = ACTIVE_HOSPITAL?.name || '选择模拟医院';
-export const appStorageKey = (key: string) => key + ':' + (ACTIVE_HOSPITAL?.id || 'legacy');
-
 // ---------------- 基础模型 ----------------
-export interface Campus {
+export interface Hospital {
   id: string;
   name: string;
+  short: string;
+  fullName: string;
+  aliases: string[];
   address: string;
-  hospitalId?: string;
+  lng: number;
+  lat: number;
+  level: string;
+  openTime: string;
+  slogan: string;
+  theme: { primary: string; deep: string; accent: string; soft: string };
+}
+
+export interface Campus {
+  id: string;
+  hospitalId: string;
+  name: string;
+  address: string;
   lng?: number;
   lat?: number;
   level?: string;
@@ -38,6 +46,7 @@ export interface Doctor {
   name: string;
   title: string; // 主任医师/副主任医师/主治医师
   deptId: string;
+  campusId: string;
   avatar: string;
   intro: string;
   specialties: string[];
@@ -51,8 +60,6 @@ export interface AppointmentSlot {
   id: string;
   doctorId: string;
   departmentId: string;
-  hospitalId?: string;
-  hospitalName?: string;
   campusId: string;
   date: string; // YYYY-MM-DD
   startTime: string; // HH:MM
@@ -88,12 +95,15 @@ export interface Emr {
   diagnosis: string;
   exam: string;
   advice: string[];
+  medications?: { name: string; dose?: string; frequency?: string; days?: string | number }[];
   note: string;
 }
 
 export interface Appointment {
   id: string;
   slotId?: string;
+  hospitalId?: string;
+  hospitalName?: string;
   campusName: string;
   deptName: string;
   doctorName: string;
@@ -127,36 +137,54 @@ export interface AppointmentDraft {
   acceptedNotice: boolean;
 }
 
-const DRAFT_KEY = 'hospital-appointment-draft:' + (ACTIVE_HOSPITAL?.id || 'legacy');
+// 草稿按医院站点分开存，避免两家医院互相串号
+const draftKey = () => 'hospital-appointment-draft-' + (window.location.pathname.match(/^\/hospital\/apps\/([^/]+)/)?.[1] || 'portal');
 
 export function getDraft(): AppointmentDraft {
   try {
-    const raw = localStorage.getItem(DRAFT_KEY);
+    const raw = localStorage.getItem(draftKey());
     if (raw) return JSON.parse(raw);
   } catch { /* ignore */ }
-  return { campusId: CAMPUSES[0]?.id || null, departmentId: null, date: null, doctorId: null, slotId: null, patientId: null, acceptedNotice: false };
+  return { campusId: null, departmentId: null, date: null, doctorId: null, slotId: null, patientId: null, acceptedNotice: false };
 }
 
 export function saveDraft(draft: AppointmentDraft): void {
   try {
-    localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+    localStorage.setItem(draftKey(), JSON.stringify(draft));
   } catch { /* ignore */ }
 }
 
 export function clearDraft(): void {
   try {
-    localStorage.removeItem(DRAFT_KEY);
+    localStorage.removeItem(draftKey());
   } catch { /* ignore */ }
 }
 
 // ============================================================
 // 目录数据（与后端共用 catalog.json）
 // ============================================================
-export const CAMPUSES: Campus[] = catalog.campuses.filter((c) => !ACTIVE_HOSPITAL || c.hospitalId === ACTIVE_HOSPITAL.id);
-export const DEPARTMENTS: Dept[] = catalog.departments.filter((d) => !ACTIVE_HOSPITAL || d.campusIds.some((id) => CAMPUSES.some((c) => c.id === id)));
+export const HOSPITALS: Hospital[] = catalog.hospitals;
+export const ALL_CAMPUSES: Campus[] = catalog.campuses;
+export const DEPARTMENTS: Dept[] = catalog.departments;
 export const PATIENTS: Patient[] = catalog.patients;
-export const DOCTORS: Doctor[] = catalog.doctors;
+export const ALL_DOCTORS: Doctor[] = catalog.doctors;
+export const SITE_NOTE: string = catalog.site.note;
 
+// 当前医院从 /hospital/apps/{hospital_id}/ 读取，应用和 API 均按医院隔离。
+const appMatch = window.location.pathname.match(/^\/hospital\/apps\/([^/]+)/);
+export const ACTIVE_HOSPITAL = HOSPITALS.find((h) => h.id === (appMatch ? decodeURIComponent(appMatch[1]) : ''));
+export const APP_BASE = ACTIVE_HOSPITAL ? `/hospital/apps/${ACTIVE_HOSPITAL.id}` : '/hospital';
+export const HOSPITAL_NAME = ACTIVE_HOSPITAL?.name || '选择模拟医院';
+
+// 兼容页面里原有的当前医院判断；医院名称不再进入 URL。
+export const CURRENT_SITE = ACTIVE_HOSPITAL ? ACTIVE_HOSPITAL.id : '';
+export const HOSPITAL: Hospital = ACTIVE_HOSPITAL || HOSPITALS[0];
+export const CAMPUSES: Campus[] = ALL_CAMPUSES.filter((c) => c.hospitalId === HOSPITAL.id);
+export const DOCTORS: Doctor[] = ALL_DOCTORS.filter((d) => CAMPUSES.some((c) => c.id === d.campusId));
+
+export const siteOf = (h: Hospital) => h.id.replace(/^h-/, '');
+/** BrowserRouter 使用 APP_BASE 作为 basename，页面链接只写应用内路径。 */
+export const to = (path: string) => path.startsWith('/') ? path : '/' + path;
 
 // ============================================================
 // 后端状态：号源 / 预约（启动时加载，提交后局部更新）
@@ -221,7 +249,7 @@ export function matchDeptBySymptom(symptom: string): Dept | null {
 }
 
 // ============================================================
-// 预约 / 取消 / 支付 / 病历（后端校验号源、幂等）
+// 预约 / 取消 / 病历（后端校验号源与幂等；v2 起提交前由家人在小艺里确认，不再有授权环节）
 // ============================================================
 export interface SubmitResult { ok: boolean; error?: string; appointment?: Appointment }
 

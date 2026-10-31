@@ -6,7 +6,6 @@ import {
   Loader2, Footprints, BadgeCheck,
 } from "lucide-react";
 import type { ChatCard } from "../types";
-import { api, post } from "../api";
 import { careAct } from "./careApi";
 
 type D = Record<string, any>;
@@ -19,9 +18,7 @@ function useAct(card: ChatCard, onUpdate: () => Promise<void>) {
     setBusy(action + (extra.option ? ":" + extra.option : ""));
     setError("");
     try {
-      if (card.care?.data.prognosis) {
-        await api(`/api/groups/${card.care.data.gid}/prognosis/${encodeURIComponent(card.id)}/act`, post({ action, ...extra }));
-      } else await careAct(card.id, action, extra);
+      await careAct(card.id, action, extra);
       await onUpdate();
     } catch (e) {
       setError((e as Error).message);
@@ -234,15 +231,16 @@ export function CareCard({ card, onUpdate }: { card: ChatCard; onUpdate: () => P
             </label>
           ))}
         </div>
+        {d.uncertain?.length > 0 && <div className="cc-warn">待核对：{d.uncertain.join("、")}</div>}
         <div className="cc-note">
-          <Sparkles size={13} />{d.extracted_by === "llm" ? "大模型从病历医嘱中结构化提取" : "按病历结构化字段生成（离线规则）"} · 不新增药物、不改剂量
+          <Sparkles size={13} />{d.extracted_by === "vision" ? "视觉模型从病历/药单中提取" : d.extracted_by === "llm" ? "大模型从医嘱中结构化提取" : "按病历结构化字段生成（离线规则）"} · 不新增药物、不改剂量
         </div>
         {open ? (
           <div className="cc-actions">
             <Btn onClick={() => act("confirm_plan", { enabled: Object.keys(enabled).filter((k) => enabled[k]) })} busy={busy === "confirm_plan"}>确认计划</Btn>
             <Btn kind="ghost" onClick={() => act("dismiss")} busy={busy === "dismiss"}>暂不启用</Btn>
           </div>
-        ) : <><Result text={d.result} />{d.prognosis && actions.includes("cancel_plan") && <div className="cc-actions"><Btn kind="ghost" busy={busy === "cancel_plan"} onClick={() => act("cancel_plan")}>取消提醒</Btn></div>}</>}
+        ) : <Result text={d.result} />}
       </>
     );
   }

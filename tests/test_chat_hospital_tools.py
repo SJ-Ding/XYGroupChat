@@ -35,7 +35,7 @@ def request(text):
 ])
 async def test_all_chat_query_branches_use_real_executor_and_persist_results(family,monkeypatch,text,exact):
     tomorrow=democlock.shift_date(democlock.today(),1)
-    slot=next(s for s in H.find_slots('d-guke',tomorrow,'afternoon','c-main') if s['status']=='available')
+    slot=next(s for s in H.find_slots('d-guke',tomorrow,'afternoon','c-jsph') if s['status']=='available')
     slot={**slot,'id':'tool-only','startTime':'16:00','remaining':7}
     calls=[]
     async def provider(ctx,args):
@@ -97,7 +97,7 @@ async def test_two_real_chat_messages_have_distinct_fresh_query_receipts(family,
     import httpx
     from backend.app import app,agent
     tomorrow=democlock.shift_date(democlock.today(),1)
-    slot=next(s for s in H.find_slots('d-guke',tomorrow,'afternoon','c-main') if s['status']=='available')
+    slot=next(s for s in H.find_slots('d-guke',tomorrow,'afternoon','c-jsph') if s['status']=='available')
     calls=[]
     async def provider(ctx,args):
         calls.append((ctx.source_id,args))

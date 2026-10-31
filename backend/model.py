@@ -92,27 +92,31 @@ class Model:
     def __init__(self, transport=None):
         self.transport = transport
 
-    def _client(self):
+    def _client(self, timeout=None):
         """Build an AsyncClient with proxy only when no custom transport is set.
 
         Tests pass a MockTransport; applying a proxy alongside a transport makes
         httpx route through the real proxy instead of the mock. So proxy/verify
         are only applied in production (no transport).
         """
+        timeout = timeout or 70
         if self.transport is not None:
-            return httpx.AsyncClient(timeout=70, transport=self.transport)
-        return httpx.AsyncClient(timeout=70, proxy=_PROXY, verify=_VERIFY)
+            return httpx.AsyncClient(timeout=timeout, transport=self.transport)
+        base = os.getenv('DEEPSEEK_BASE_URL', 'https://api.deepseek.com')
+        local = re.match(r'https?://(127\.0\.0\.1|localhost)(:|/|$)', base)
+        return httpx.AsyncClient(timeout=timeout, proxy=None if local else _PROXY, verify=True if local else _VERIFY)
 
-    async def call(self, messages, tools=None, structured=False):
+    async def call(self, messages, tools=None, structured=False, model_override=None, timeout=None):
         key = os.getenv('DEEPSEEK_API_KEY', '')
         if not key:
             raise ModelError('尚未配置 DEEPSEEK_API_KEY，请填写服务端 .env 后重启', kind='configuration')
-        model = os.getenv('DEEPSEEK_MODEL', 'deepseek-flash')
+        model = model_override or os.getenv('DEEPSEEK_MODEL', 'deepseek-flash')
         body = {'model': model, 'messages': messages, 'max_tokens': 4096 if structured else 2200, 'stream': False}
-        if model.startswith('deepseek-'):
-            thinking = 'disabled' if structured else os.getenv('DEEPSEEK_THINKING', 'disabled')
+        configured = os.getenv('DEEPSEEK_THINKING', 'disabled')
+        if model.startswith('deepseek-') and configured != 'omit':
+            thinking = 'disabled' if structured else configured
             if thinking not in ('enabled', 'disabled'):
-                raise ModelError('DEEPSEEK_THINKING 仅支持 enabled 或 disabled', kind='configuration')
+                raise ModelError('DEEPSEEK_THINKING 仅支持 enabled、disabled 或 omit', kind='configuration')
             body['thinking'] = {'type': thinking}
             if thinking == 'enabled':
                 body['max_tokens'] = 8192
@@ -121,7 +125,7 @@ class Model:
         if structured:
             body['response_format'] = {'type': 'json_object'}
         usage, usage_complete = {}, True
-        async with self._client() as client:
+        async with self._client(timeout) as client:
             # Only invalid structured outputs get one bounded retry. Never
             # retry HTTP errors or replay tools as part of format repair.
             for attempt in range(1, 3 if structured else 2):

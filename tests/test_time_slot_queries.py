@@ -33,7 +33,7 @@ async def no_broadcast(*args):pass
 @pytest.mark.parametrize('has_exact_slot',[True,False])
 async def test_original_message_searches_exact_time_without_booking(family,monkeypatch,has_exact_slot):
     tomorrow=democlock.shift_date(democlock.today(),1)
-    slot=next(s for s in H.find_slots('d-guke',tomorrow,'afternoon','c-main') if s['status']=='available')
+    slot=next(s for s in H.find_slots('d-guke',tomorrow,'afternoon','c-jsph') if s['status']=='available')
     nearby={**slot,'id':'nearby','startTime':'14:00','status':'available'}
     exact={**slot,'id':'exact','startTime':'16:00','status':'available'}
     full={**slot,'id':'full','startTime':'16:00','status':'full','remaining':0}
@@ -61,7 +61,7 @@ async def test_original_message_searches_exact_time_without_booking(family,monke
 @pytest.mark.asyncio
 async def test_query_tool_honors_exact_time(family,monkeypatch):
     tomorrow=democlock.shift_date(democlock.today(),1)
-    slot=next(s for s in H.find_slots('d-guke',tomorrow,'afternoon','c-main') if s['status']=='available')
+    slot=next(s for s in H.find_slots('d-guke',tomorrow,'afternoon','c-jsph') if s['status']=='available')
     monkeypatch.setattr(H,'generate_slots',lambda dates=None:[{**slot,'startTime':'14:00'},{**slot,'startTime':'16:00'}])
     result=await hospital_simulator(SkillContext(1,3,'clock-query',0),{'action':'query','department':'骨科','date':tomorrow,'time':'16:00'})
     assert result['slots'] and all(s['startTime']=='16:00' for s in result['slots'])

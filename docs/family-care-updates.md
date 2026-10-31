@@ -1,15 +1,19 @@
-# 挂号与预后守护
+# 医院 v2 与就诊后守护
 
-医院目录来自高德 MCP，基于记忆中的南京鼓楼区中山北路道路级定位，距离为近似直线距离。目录保留 POI、查询时间和来源。医生、排班、费用、预约、支付仍是模拟数据。旧预约保留原名称并标为 legacy-hospital。
+可代办医院为江苏省人民医院（`h-jsph`）和南京鼓楼医院（`h-glyy`）。医院名称、地址和 POI 来自高德公开数据，并写入医院目录；医生、排班、费用、号源、预约和病历仍是虚构演示数据。
 
-- “帮妈妈挂明天上午骨科的号”：先选择医院应用，再自动排序选号、按至少1.5秒点击间隔代填和锁号，支付卡交由本人确认付款。
-- “查询骨科号源”：只查询，不办理。工具 query 支持 department、date、preferred_time、hospital_id；nearby 用当前可见记忆中的 address 查询高德，失败时可重试。
-- “按这张药单给妈妈创建预后提醒”：读取图片及历史医嘱，缺患者、时间或明确疗程时追问；用户勾选并确认计划后创建逐次提醒。提醒可在计划卡点击“取消提醒”，或在现有提醒管理取消。时区 Asia/Shanghai，不预设14天疗程。
+- “帮妈妈挂明天上午骨科的号”：先选择医院，再自动排序选号，以至少 1.5 秒间隔填写预约页面，到核对页等待家人确认；锁号后由本人在所属医院模拟收银台支付。
+- “查询骨科号源”：只查询，不办理。`hospital_simulator(action=query)` 支持 department、date、time、preferred_time、hospital_id，返回号源和医院目录，不启动浏览器。
+- “按这张药单给妈妈创建提醒”：`family-aftercare` 读取病历/药单图片或文字医嘱，生成待确认守护计划；确认后写入照护事项、医疗档案、打卡和复诊简报。
 
-新回复异步提取图片事实及完成的挂号工具结果，保存原始消息、附件和回复来源。普通用户事实沿用现有会话分析。自动记忆开关、拒绝记录、空间权限均继续生效。
+医院选择入口为 `/hospital/`。独立应用地址为 `/hospital/apps/{hospital_id}/`，对应 API 为 `/api/hospital/apps/{hospital_id}/`。新增按院查号接口：
 
-历史图片识别结果回填：`POST /api/groups/{gid}/memories/backfill`，请求 `{ "preview": true, "limit": 100 }` 预览；改为 `preview:false` 执行。使用同一登录身份和空间访问校验，limit 最大500；幂等去重，不覆盖已有事实。旧回复按同会话前一条用户图片关联，新回复使用明确的来源记录。
+```text
+GET /api/hospital/apps/{hospital_id}/slots?dept=骨科&date=2026-11-01&session=morning
+```
 
-预后确认接口：`POST /api/groups/{gid}/prognosis/{card_id}/act`，请求 `{ "action":"confirm_plan", "enabled":["0"] }`；空列表代表不启用任何事项，`dismiss` 放弃草案。重复确认不会重复创建提醒。
+每个应用只加载本院号源和预约，后端拒绝跨院预约、查询、支付、取消和病历访问。旧预约继续保留，并标记为 `legacy-hospital`。
 
-医院选择入口：`/hospital/`。独立应用地址为 `/hospital/apps/{hospital_id}/`，对应 API 为 `/api/hospital/apps/{hospital_id}/`。每个应用只加载本院号源及预约，挂号草稿按医院分别保存，后端拒绝跨院预约、支付、查询及取消请求。旧支付链接会跳转到预约所属医院。
+病历识图使用 `DEEPSEEK_VISION_MODEL`（留空回退到 `DEEPSEEK_MODEL`）和 `VISION_TIMEOUT`；图片按内容哈希缓存，同一图片不会重复调用模型或重复写入医疗档案。低置信度、非医疗图片、模型未配置或超时不会生成计划。
+
+守护计划统一通过 `POST /api/care/cards/{card_id}/act` 确认。旧 `family-prognosis-guard`、`prognosis_guard` 工具和 `/api/groups/{gid}/prognosis/{key}/act` 已移除。升级时先备份数据库，再清理旧预后卡片、相关提醒和待追问状态，不删除预约、上传图片或其他照护数据。

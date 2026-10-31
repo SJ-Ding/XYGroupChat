@@ -1,6 +1,6 @@
 """“家人帮”演示数据：一键重置到可复现的初始状态。
 
-全部人物、病史、医院、号源均为虚构，仅用于产品演示。
+人物、病史、医生和号源均为虚构；医院名称与地址来自高德公开数据，仅用于产品演示。
 重置会清空聊天、记忆与任务记录（账号与群成员保留），并把演示时钟拨到“今天 20:10”。
 """
 import time
@@ -15,6 +15,7 @@ from .persona import DEFAULT_AGENT_NAME, DEFAULT_PROMPT
 
 GID = 1
 START_CLOCK = '20:10'
+PRIMARY_CAMPUS = 'c-jsph'
 
 # 家庭画像（演示用）。username 与 URL 身份一致：dad / mom / child。
 FAMILY = {
@@ -64,8 +65,10 @@ def _memory(db, ids, key, member, content, domain='general', profile=None, categ
 def _appointment(db, appt_id, patient, campus, dept, doctor, date, start, fee, created):
     from . import hospital_data as H
     camp, dep, doc, pat = H.campus(campus), H.department(dept), H.doctor(doctor), H.patient(patient)
+    hosp = H.hospital_of(campus)
     put(db, H.KIND, H.GID, appt_id, {
         'id': appt_id, 'slotId': None, 'campusId': campus, 'campusName': camp['name'], 'deptId': dept,
+        'hospitalId': hosp['id'], 'hospitalName': hosp['name'],
         'deptName': dep['name'], 'doctorId': doctor, 'doctorName': doc['name'], 'doctorTitle': doc['title'],
         'date': date, 'session': 'morning', 'startTime': start, 'endTime': H._end(start), 'category': 'general',
         'fee': fee, 'patientName': pat['name'], 'patientId': patient, 'taskId': None,
@@ -90,9 +93,10 @@ def seed(db):
     _memory(db, ids, 'seed-mom-history', 'mom', '妈妈（王秀兰，62岁）2024年右膝半月板损伤，阴雨天和久走后容易酸痛',
             'medical', {'record_type': 'history', 'condition': '右膝半月板损伤', 'department': '骨科'}, 'medical')
     from . import hospital_data as H
-    hospital_name = H.campus('c-main')['name']
+    campus = H.campus(PRIMARY_CAMPUS)
+    hospital_name = H.hospital_of(PRIMARY_CAMPUS)['name']
     _memory(db, ids, 'seed-mom-hospital', 'mom', f'妈妈常去{hospital_name}骨科，近一年模拟就诊过3次',
-            'medical', {'record_type': 'hospital', 'hospital': hospital_name, 'hospital_id': H.campus('c-main').get('hospitalId'), 'campus': hospital_name, 'campus_id': 'c-main',
+            'medical', {'record_type': 'hospital', 'hospital': hospital_name, 'hospital_id': campus.get('hospitalId'), 'campus': campus['name'], 'campus_id': PRIMARY_CAMPUS,
                         'department': '骨科', 'visits': 3}, 'medical')
     _memory(db, ids, 'seed-mom-doctor', 'mom', '妈妈上次看的是骨科张明远副主任医师，对他很信任',
             'medical', {'record_type': 'doctor', 'doctor': '张明远', 'doctor_id': 'doc-g1', 'department': '骨科'}, 'medical')
@@ -109,10 +113,10 @@ def seed(db):
     _memory(db, ids, 'seed-child', 'child', '小林在上海工作，是家里的照护人，平时远程帮爸妈办事', category='fact')
 
     # 历史就诊（医院平台记录）
-    _appointment(db, 'AP-HIS0001', 'p-001', 'c-main', 'd-guke', 'doc-g1', shift(-300), '08:30', 65, now - 300 * 86400)
-    _appointment(db, 'AP-HIS0002', 'p-001', 'c-main', 'd-guke', 'doc-g1', shift(-150), '09:30', 65, now - 150 * 86400)
-    _appointment(db, 'AP-HIS0003', 'p-001', 'c-main', 'd-guke', 'doc-g1', shift(-45), '08:30', 65, now - 45 * 86400)
-    _appointment(db, 'AP-HIS0004', 'p-003', 'c-main', 'd-xinneike', 'doc-x1', shift(-80), '08:30', 90, now - 80 * 86400)
+    _appointment(db, 'AP-HIS0001', 'p-001', PRIMARY_CAMPUS, 'd-guke', 'doc-g1', shift(-300), '08:30', 65, now - 300 * 86400)
+    _appointment(db, 'AP-HIS0002', 'p-001', PRIMARY_CAMPUS, 'd-guke', 'doc-g1', shift(-150), '09:30', 65, now - 150 * 86400)
+    _appointment(db, 'AP-HIS0003', 'p-001', PRIMARY_CAMPUS, 'd-guke', 'doc-g1', shift(-45), '08:30', 65, now - 45 * 86400)
+    _appointment(db, 'AP-HIS0004', 'p-003', PRIMARY_CAMPUS, 'd-xinneike', 'doc-x1', shift(-80), '08:30', 90, now - 80 * 86400)
 
     # 照护事项：爸爸长期服用降压药（每天 08:00），本周已有两次漏服
     put(db, 'care_item', GID, 'dad-med', {

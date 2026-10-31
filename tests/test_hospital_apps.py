@@ -49,6 +49,24 @@ def test_browser_app_base_and_legacy_entry(monkeypatch):
     assert hospital_base('amap-example') == 'http://127.0.0.1:8000/hospital/apps/amap-example/'
 
 
+def test_v2_catalog_and_scoped_slot_query(family):
+    target = H.hospital('h-jsph')
+    assert target['name'] == '江苏省人民医院'
+    assert target['poiId'] == 'B00190514F' and target['source'] == '高德公开数据'
+    assert H.find_hospital('去省人医看骨科')['id'] == 'h-jsph'
+    tomorrow = democlock.shift_date(democlock.today(), 1)
+    with TestClient(app) as client:
+        with DB() as db:
+            before = len(H.appointments(db))
+        result = client.get('/api/hospital/apps/h-jsph/slots', params={'dept': '骨科', 'date': tomorrow, 'session': 'morning'})
+        assert result.status_code == 200
+        data = result.json()
+        assert data['hospitals'][0]['hospital_id'] == 'h-jsph'
+        assert all(item['slot_id'] for item in data['hospitals'][0]['slots'])
+        with DB() as db:
+            assert len(H.appointments(db)) == before
+
+
 def test_booking_task_identity_includes_selected_application():
     from backend.hospital_simulator import _run_key
     assert _run_key(1,1,'挂骨科','hospital-a') != _run_key(1,1,'挂骨科','hospital-b')

@@ -1,24 +1,83 @@
 {
- "campuses": [
+ "hospitals": [
   {
-   "id": "c-main",
-   "name": "南京医科大学第二附属医院(萨家湾院区)",
-   "address": "挹江门街道中山北路309号",
-   "lng": 118.756361,
-   "lat": 32.0835,
+   "id": "h-jsph",
+   "name": "江苏省人民医院",
+   "short": "省人医",
+   "fullName": "南京医科大学第一附属医院",
+   "aliases": [
+    "江苏省人民医院",
+    "省人民医院",
+    "省人医",
+    "人民医院",
+    "第一人民医院",
+    "南京市第一人民医院",
+    "市第一人民医院",
+    "南医大一附院",
+    "南京医科大学第一附属医院"
+   ],
+   "address": "南京市鼓楼区广州路300号",
+   "lng": 118.766276,
+   "lat": 32.049208,
    "level": "三级甲等",
-   "hospitalId": "amap-B001909Z1X",
-   "source": "高德 MCP"
+   "openTime": "周一至周六 07:30-11:30，14:00-17:00",
+   "amapId": "B00190514F",
+   "poiId": "B00190514F",
+   "source": "高德公开数据",
+   "theme": {
+    "primary": "#0B4F9C",
+    "deep": "#083A75",
+    "accent": "#E8A317",
+    "soft": "#EAF2FC"
+   },
+   "slogan": "仁心 · 仁术 · 守护健康"
   },
   {
-   "id": "c-east",
-   "name": "南京市第二医院(钟阜院区)",
-   "address": "钟阜路1-1号",
-   "lng": 118.768137,
-   "lat": 32.088873,
+   "id": "h-glyy",
+   "name": "南京鼓楼医院",
+   "short": "鼓楼医院",
+   "fullName": "南京大学医学院附属鼓楼医院",
+   "aliases": [
+    "南京鼓楼医院",
+    "鼓楼医院",
+    "南京大学医学院附属鼓楼医院",
+    "南大鼓楼医院"
+   ],
+   "address": "南京市鼓楼区中山路321号",
+   "lng": 118.783042,
+   "lat": 32.05618,
    "level": "三级甲等",
-   "hospitalId": "amap-B001905128",
-   "source": "高德 MCP"
+   "openTime": "周一至周日 06:30-18:00",
+   "amapId": "B00190B48R",
+   "poiId": "B00190B48R",
+   "source": "高德公开数据",
+   "theme": {
+    "primary": "#0E6E5C",
+    "deep": "#0A5245",
+    "accent": "#C8102E",
+    "soft": "#E8F4F1"
+   },
+   "slogan": "以病人为中心 · 以质量为核心"
+  }
+ ],
+ "campuses": [
+  {
+   "id": "c-jsph",
+   "hospitalId": "h-jsph",
+   "name": "本部",
+   "address": "广州路300号",
+   "lng": 118.766276,
+   "lat": 32.049208,
+   "level": "三级甲等"
+  },
+  {
+   "id": "c-glyy",
+   "hospitalId": "h-glyy",
+   "name": "本部",
+   "address": "中山路321号",
+   "lng": 118.783042,
+   "lat": 32.05618,
+   "level": "三级甲等"
   }
  ],
  "departments": [
@@ -35,8 +94,8 @@
     "体检"
    ],
    "campusIds": [
-    "c-main",
-    "c-east"
+    "c-jsph",
+    "c-glyy"
    ]
   },
   {
@@ -53,8 +112,8 @@
     "慢阻肺"
    ],
    "campusIds": [
-    "c-main",
-    "c-east"
+    "c-jsph",
+    "c-glyy"
    ]
   },
   {
@@ -71,7 +130,8 @@
     "冠心病"
    ],
    "campusIds": [
-    "c-main"
+    "c-jsph",
+    "c-glyy"
    ]
   },
   {
@@ -89,8 +149,8 @@
     "胃溃疡"
    ],
    "campusIds": [
-    "c-main",
-    "c-east"
+    "c-jsph",
+    "c-glyy"
    ]
   },
   {
@@ -107,7 +167,8 @@
     "骨质疏松"
    ],
    "campusIds": [
-    "c-main"
+    "c-jsph",
+    "c-glyy"
    ]
   },
   {
@@ -125,8 +186,8 @@
     "手脚发麻"
    ],
    "campusIds": [
-    "c-main",
-    "c-east"
+    "c-jsph",
+    "c-glyy"
    ]
   },
   {
@@ -142,7 +203,8 @@
     "肾结石"
    ],
    "campusIds": [
-    "c-main"
+    "c-jsph",
+    "c-glyy"
    ]
   },
   {
@@ -158,8 +220,8 @@
     "胆结石"
    ],
    "campusIds": [
-    "c-main",
-    "c-east"
+    "c-jsph",
+    "c-glyy"
    ]
   },
   {
@@ -178,8 +240,8 @@
     "腿疼"
    ],
    "campusIds": [
-    "c-main",
-    "c-east"
+    "c-jsph",
+    "c-glyy"
    ]
   },
   {
@@ -194,7 +256,8 @@
     "脑梗"
    ],
    "campusIds": [
-    "c-main"
+    "c-jsph",
+    "c-glyy"
    ]
   },
   {
@@ -210,7 +273,8 @@
     "血尿"
    ],
    "campusIds": [
-    "c-main"
+    "c-jsph",
+    "c-glyy"
    ]
   },
   {
@@ -225,7 +289,8 @@
     "气胸"
    ],
    "campusIds": [
-    "c-main"
+    "c-jsph",
+    "c-glyy"
    ]
   },
   {
@@ -241,8 +306,8 @@
     "妇科体检"
    ],
    "campusIds": [
-    "c-main",
-    "c-east"
+    "c-jsph",
+    "c-glyy"
    ]
   },
   {
@@ -257,7 +322,8 @@
     "分娩"
    ],
    "campusIds": [
-    "c-main"
+    "c-jsph",
+    "c-glyy"
    ]
   },
   {
@@ -273,8 +339,8 @@
     "生长发育"
    ],
    "campusIds": [
-    "c-main",
-    "c-east"
+    "c-jsph",
+    "c-glyy"
    ]
   },
   {
@@ -291,8 +357,8 @@
     "飞蚊症"
    ],
    "campusIds": [
-    "c-main",
-    "c-east"
+    "c-jsph",
+    "c-glyy"
    ]
   },
   {
@@ -310,7 +376,8 @@
     "中耳炎"
    ],
    "campusIds": [
-    "c-main"
+    "c-jsph",
+    "c-glyy"
    ]
   },
   {
@@ -327,8 +394,8 @@
     "洗牙"
    ],
    "campusIds": [
-    "c-main",
-    "c-east"
+    "c-jsph",
+    "c-glyy"
    ]
   },
   {
@@ -345,7 +412,8 @@
     "皮肤瘙痒"
    ],
    "campusIds": [
-    "c-main"
+    "c-jsph",
+    "c-glyy"
    ]
   },
   {
@@ -360,7 +428,8 @@
     "癌症术后"
    ],
    "campusIds": [
-    "c-main"
+    "c-jsph",
+    "c-glyy"
    ]
   },
   {
@@ -376,8 +445,8 @@
     "慢性病调理"
    ],
    "campusIds": [
-    "c-main",
-    "c-east"
+    "c-jsph",
+    "c-glyy"
    ]
   },
   {
@@ -392,7 +461,839 @@
     "跌倒预防"
    ],
    "campusIds": [
-    "c-main"
+    "c-jsph",
+    "c-glyy"
+   ]
+  }
+ ],
+ "doctors": [
+  {
+   "id": "doc-g1",
+   "name": "张明远",
+   "title": "副主任医师",
+   "deptId": "d-guke",
+   "campusId": "c-jsph",
+   "avatar": "👨‍⚕️",
+   "intro": "从事骨科临床20年，擅长膝关节、髋关节退行性疾病和半月板损伤的保守与微创治疗。",
+   "specialties": [
+    "膝关节",
+    "半月板损伤",
+    "骨关节炎",
+    "关节疼痛"
+   ]
+  },
+  {
+   "id": "doc-g2",
+   "name": "李建华",
+   "title": "主治医师",
+   "deptId": "d-guke",
+   "campusId": "c-jsph",
+   "avatar": "👨‍⚕️",
+   "intro": "专注运动损伤与关节镜微创治疗，擅长韧带、半月板损伤的康复指导。",
+   "specialties": [
+    "运动损伤",
+    "半月板",
+    "韧带损伤",
+    "扭伤"
+   ]
+  },
+  {
+   "id": "doc-g3",
+   "name": "周建国",
+   "title": "主任医师",
+   "deptId": "d-guke",
+   "campusId": "c-glyy",
+   "avatar": "👨‍⚕️",
+   "intro": "脊柱与关节外科，擅长腰椎间盘突出、颈椎病及膝关节置换。",
+   "specialties": [
+    "腰椎间盘突出",
+    "颈椎病",
+    "关节置换",
+    "脊柱"
+   ]
+  },
+  {
+   "id": "doc-g4",
+   "name": "陈晓燕",
+   "title": "副主任医师",
+   "deptId": "d-guke",
+   "campusId": "c-glyy",
+   "avatar": "👩‍⚕️",
+   "intro": "擅长骨质疏松、老年骨关节病的综合诊治。",
+   "specialties": [
+    "骨质疏松",
+    "骨关节炎",
+    "老年骨病"
+   ]
+  },
+  {
+   "id": "doc-g5",
+   "name": "吴海峰",
+   "title": "主治医师",
+   "deptId": "d-guke",
+   "campusId": "c-glyy",
+   "avatar": "👨‍⚕️",
+   "intro": "擅长四肢创伤、运动损伤及术后康复。",
+   "specialties": [
+    "创伤",
+    "运动损伤",
+    "术后康复"
+   ]
+  },
+  {
+   "id": "doc-x1",
+   "name": "陈志强",
+   "title": "主任医师",
+   "deptId": "d-xinneike",
+   "campusId": "c-jsph",
+   "avatar": "👨‍⚕️",
+   "intro": "高血压与冠心病诊治，长期负责高血压专病门诊。",
+   "specialties": [
+    "高血压",
+    "冠心病",
+    "心律失常"
+   ]
+  },
+  {
+   "id": "doc-x2",
+   "name": "林秀芳",
+   "title": "副主任医师",
+   "deptId": "d-xinneike",
+   "campusId": "c-jsph",
+   "avatar": "👩‍⚕️",
+   "intro": "擅长难治性高血压、心力衰竭的规范化管理。",
+   "specialties": [
+    "高血压",
+    "心衰",
+    "血脂异常"
+   ]
+  },
+  {
+   "id": "doc-x3",
+   "name": "赵明",
+   "title": "主治医师",
+   "deptId": "d-xinneike",
+   "campusId": "c-glyy",
+   "avatar": "👨‍⚕️",
+   "intro": "擅长胸闷心悸的鉴别诊断与冠心病二级预防。",
+   "specialties": [
+    "胸闷",
+    "心悸",
+    "冠心病"
+   ]
+  },
+  {
+   "id": "doc-x4",
+   "name": "沈立群",
+   "title": "主任医师",
+   "deptId": "d-xinneike",
+   "campusId": "c-glyy",
+   "avatar": "👨‍⚕️",
+   "intro": "冠心病介入与心律失常诊治。",
+   "specialties": [
+    "冠心病",
+    "心律失常",
+    "介入治疗"
+   ]
+  },
+  {
+   "id": "doc-neike-jsph-1",
+   "name": "彭磊",
+   "title": "副主任医师",
+   "deptId": "d-neike",
+   "campusId": "c-jsph",
+   "avatar": "👨‍⚕️",
+   "intro": "普通内科副主任医师，擅长发热、感冒、咳嗽等常见病、多发病的诊治。",
+   "specialties": [
+    "发热",
+    "感冒",
+    "咳嗽"
+   ]
+  },
+  {
+   "id": "doc-neike-glyy-1",
+   "name": "韩振宇",
+   "title": "主任医师",
+   "deptId": "d-neike",
+   "campusId": "c-glyy",
+   "avatar": "👩‍⚕️",
+   "intro": "普通内科主任医师，擅长发热、感冒、咳嗽等常见病、多发病的诊治。",
+   "specialties": [
+    "发热",
+    "感冒",
+    "咳嗽"
+   ]
+  },
+  {
+   "id": "doc-huxi-jsph-1",
+   "name": "邓春华",
+   "title": "主任医师",
+   "deptId": "d-huxi",
+   "campusId": "c-jsph",
+   "avatar": "👨‍⚕️",
+   "intro": "呼吸内科主任医师，擅长咳嗽、气喘、胸闷等常见病、多发病的诊治。",
+   "specialties": [
+    "咳嗽",
+    "气喘",
+    "胸闷"
+   ]
+  },
+  {
+   "id": "doc-huxi-jsph-2",
+   "name": "江晨",
+   "title": "副主任医师",
+   "deptId": "d-huxi",
+   "campusId": "c-jsph",
+   "avatar": "👨‍⚕️",
+   "intro": "呼吸内科副主任医师，擅长咳嗽、气喘、胸闷等常见病、多发病的诊治。",
+   "specialties": [
+    "咳嗽",
+    "气喘",
+    "胸闷"
+   ]
+  },
+  {
+   "id": "doc-huxi-glyy-1",
+   "name": "董秀英",
+   "title": "主任医师",
+   "deptId": "d-huxi",
+   "campusId": "c-glyy",
+   "avatar": "👨‍⚕️",
+   "intro": "呼吸内科主任医师，擅长咳嗽、气喘、胸闷等常见病、多发病的诊治。",
+   "specialties": [
+    "咳嗽",
+    "气喘",
+    "胸闷"
+   ]
+  },
+  {
+   "id": "doc-huxi-glyy-2",
+   "name": "曹鹏",
+   "title": "副主任医师",
+   "deptId": "d-huxi",
+   "campusId": "c-glyy",
+   "avatar": "👩‍⚕️",
+   "intro": "呼吸内科副主任医师，擅长咳嗽、气喘、胸闷等常见病、多发病的诊治。",
+   "specialties": [
+    "咳嗽",
+    "气喘",
+    "胸闷"
+   ]
+  },
+  {
+   "id": "doc-xiaohua-jsph-1",
+   "name": "宋磊",
+   "title": "主任医师",
+   "deptId": "d-xiaohua",
+   "campusId": "c-jsph",
+   "avatar": "👩‍⚕️",
+   "intro": "消化内科主任医师，擅长胃痛、胃胀、反酸等常见病、多发病的诊治。",
+   "specialties": [
+    "胃痛",
+    "胃胀",
+    "反酸"
+   ]
+  },
+  {
+   "id": "doc-xiaohua-jsph-2",
+   "name": "雷振宇",
+   "title": "副主任医师",
+   "deptId": "d-xiaohua",
+   "campusId": "c-jsph",
+   "avatar": "👨‍⚕️",
+   "intro": "消化内科副主任医师，擅长胃痛、胃胀、反酸等常见病、多发病的诊治。",
+   "specialties": [
+    "胃痛",
+    "胃胀",
+    "反酸"
+   ]
+  },
+  {
+   "id": "doc-xiaohua-glyy-1",
+   "name": "杨一鸣",
+   "title": "主任医师",
+   "deptId": "d-xiaohua",
+   "campusId": "c-glyy",
+   "avatar": "👨‍⚕️",
+   "intro": "消化内科主任医师，擅长胃痛、胃胀、反酸等常见病、多发病的诊治。",
+   "specialties": [
+    "胃痛",
+    "胃胀",
+    "反酸"
+   ]
+  },
+  {
+   "id": "doc-xiaohua-glyy-2",
+   "name": "史浩然",
+   "title": "副主任医师",
+   "deptId": "d-xiaohua",
+   "campusId": "c-glyy",
+   "avatar": "👩‍⚕️",
+   "intro": "消化内科副主任医师，擅长胃痛、胃胀、反酸等常见病、多发病的诊治。",
+   "specialties": [
+    "胃痛",
+    "胃胀",
+    "反酸"
+   ]
+  },
+  {
+   "id": "doc-neifenmi-jsph-1",
+   "name": "白红霞",
+   "title": "主任医师",
+   "deptId": "d-neifenmi",
+   "campusId": "c-jsph",
+   "avatar": "👩‍⚕️",
+   "intro": "内分泌科主任医师，擅长糖尿病、甲状腺、甲亢等常见病、多发病的诊治。",
+   "specialties": [
+    "糖尿病",
+    "甲状腺",
+    "甲亢"
+   ]
+  },
+  {
+   "id": "doc-neifenmi-jsph-2",
+   "name": "丁磊",
+   "title": "副主任医师",
+   "deptId": "d-neifenmi",
+   "campusId": "c-jsph",
+   "avatar": "👩‍⚕️",
+   "intro": "内分泌科副主任医师，擅长糖尿病、甲状腺、甲亢等常见病、多发病的诊治。",
+   "specialties": [
+    "糖尿病",
+    "甲状腺",
+    "甲亢"
+   ]
+  },
+  {
+   "id": "doc-neifenmi-glyy-1",
+   "name": "贺婷",
+   "title": "主任医师",
+   "deptId": "d-neifenmi",
+   "campusId": "c-glyy",
+   "avatar": "👩‍⚕️",
+   "intro": "内分泌科主任医师，擅长糖尿病、甲状腺、甲亢等常见病、多发病的诊治。",
+   "specialties": [
+    "糖尿病",
+    "甲状腺",
+    "甲亢"
+   ]
+  },
+  {
+   "id": "doc-neifenmi-glyy-2",
+   "name": "胡燕",
+   "title": "副主任医师",
+   "deptId": "d-neifenmi",
+   "campusId": "c-glyy",
+   "avatar": "👩‍⚕️",
+   "intro": "内分泌科副主任医师，擅长糖尿病、甲状腺、甲亢等常见病、多发病的诊治。",
+   "specialties": [
+    "糖尿病",
+    "甲状腺",
+    "甲亢"
+   ]
+  },
+  {
+   "id": "doc-shenjing-jsph-1",
+   "name": "宋丽娟",
+   "title": "主任医师",
+   "deptId": "d-shenjing",
+   "campusId": "c-jsph",
+   "avatar": "👩‍⚕️",
+   "intro": "神经内科主任医师，擅长头痛、头晕、失眠等常见病、多发病的诊治。",
+   "specialties": [
+    "头痛",
+    "头晕",
+    "失眠"
+   ]
+  },
+  {
+   "id": "doc-shenjing-jsph-2",
+   "name": "周静怡",
+   "title": "副主任医师",
+   "deptId": "d-shenjing",
+   "campusId": "c-jsph",
+   "avatar": "👩‍⚕️",
+   "intro": "神经内科副主任医师，擅长头痛、头晕、失眠等常见病、多发病的诊治。",
+   "specialties": [
+    "头痛",
+    "头晕",
+    "失眠"
+   ]
+  },
+  {
+   "id": "doc-shenjing-glyy-1",
+   "name": "胡嘉怡",
+   "title": "主任医师",
+   "deptId": "d-shenjing",
+   "campusId": "c-glyy",
+   "avatar": "👨‍⚕️",
+   "intro": "神经内科主任医师，擅长头痛、头晕、失眠等常见病、多发病的诊治。",
+   "specialties": [
+    "头痛",
+    "头晕",
+    "失眠"
+   ]
+  },
+  {
+   "id": "doc-shenjing-glyy-2",
+   "name": "顾艳玲",
+   "title": "副主任医师",
+   "deptId": "d-shenjing",
+   "campusId": "c-glyy",
+   "avatar": "👨‍⚕️",
+   "intro": "神经内科副主任医师，擅长头痛、头晕、失眠等常见病、多发病的诊治。",
+   "specialties": [
+    "头痛",
+    "头晕",
+    "失眠"
+   ]
+  },
+  {
+   "id": "doc-shen-jsph-1",
+   "name": "秦艳玲",
+   "title": "主任医师",
+   "deptId": "d-shen",
+   "campusId": "c-jsph",
+   "avatar": "👨‍⚕️",
+   "intro": "肾内科主任医师，擅长尿频、尿急、浮肿等常见病、多发病的诊治。",
+   "specialties": [
+    "尿频",
+    "尿急",
+    "浮肿"
+   ]
+  },
+  {
+   "id": "doc-shen-glyy-1",
+   "name": "方振宇",
+   "title": "主任医师",
+   "deptId": "d-shen",
+   "campusId": "c-glyy",
+   "avatar": "👨‍⚕️",
+   "intro": "肾内科主任医师，擅长尿频、尿急、浮肿等常见病、多发病的诊治。",
+   "specialties": [
+    "尿频",
+    "尿急",
+    "浮肿"
+   ]
+  },
+  {
+   "id": "doc-puwai-jsph-1",
+   "name": "曾敏",
+   "title": "主任医师",
+   "deptId": "d-puwai",
+   "campusId": "c-jsph",
+   "avatar": "👩‍⚕️",
+   "intro": "普通外科主任医师，擅长甲状腺结节、乳腺结节、疝气等常见病、多发病的诊治。",
+   "specialties": [
+    "甲状腺结节",
+    "乳腺结节",
+    "疝气"
+   ]
+  },
+  {
+   "id": "doc-puwai-glyy-1",
+   "name": "孙红霞",
+   "title": "主任医师",
+   "deptId": "d-puwai",
+   "campusId": "c-glyy",
+   "avatar": "👨‍⚕️",
+   "intro": "普通外科主任医师，擅长甲状腺结节、乳腺结节、疝气等常见病、多发病的诊治。",
+   "specialties": [
+    "甲状腺结节",
+    "乳腺结节",
+    "疝气"
+   ]
+  },
+  {
+   "id": "doc-naiwai-jsph-1",
+   "name": "金思远",
+   "title": "主任医师",
+   "deptId": "d-naiwai",
+   "campusId": "c-jsph",
+   "avatar": "👨‍⚕️",
+   "intro": "神经外科主任医师，擅长脑肿瘤、脑出血、脑外伤等常见病、多发病的诊治。",
+   "specialties": [
+    "脑肿瘤",
+    "脑出血",
+    "脑外伤"
+   ]
+  },
+  {
+   "id": "doc-naiwai-glyy-1",
+   "name": "钟永强",
+   "title": "主任医师",
+   "deptId": "d-naiwai",
+   "campusId": "c-glyy",
+   "avatar": "👨‍⚕️",
+   "intro": "神经外科主任医师，擅长脑肿瘤、脑出血、脑外伤等常见病、多发病的诊治。",
+   "specialties": [
+    "脑肿瘤",
+    "脑出血",
+    "脑外伤"
+   ]
+  },
+  {
+   "id": "doc-miniao-jsph-1",
+   "name": "陈文杰",
+   "title": "副主任医师",
+   "deptId": "d-miniao",
+   "campusId": "c-jsph",
+   "avatar": "👨‍⚕️",
+   "intro": "泌尿外科副主任医师，擅长前列腺增生、肾结石、尿频等常见病、多发病的诊治。",
+   "specialties": [
+    "前列腺增生",
+    "肾结石",
+    "尿频"
+   ]
+  },
+  {
+   "id": "doc-miniao-glyy-1",
+   "name": "武海燕",
+   "title": "主任医师",
+   "deptId": "d-miniao",
+   "campusId": "c-glyy",
+   "avatar": "👩‍⚕️",
+   "intro": "泌尿外科主任医师，擅长前列腺增生、肾结石、尿频等常见病、多发病的诊治。",
+   "specialties": [
+    "前列腺增生",
+    "肾结石",
+    "尿频"
+   ]
+  },
+  {
+   "id": "doc-xiongwai-jsph-1",
+   "name": "任振宇",
+   "title": "主任医师",
+   "deptId": "d-xiongwai",
+   "campusId": "c-jsph",
+   "avatar": "👩‍⚕️",
+   "intro": "胸外科主任医师，擅长肺结节、食管癌、胸痛等常见病、多发病的诊治。",
+   "specialties": [
+    "肺结节",
+    "食管癌",
+    "胸痛"
+   ]
+  },
+  {
+   "id": "doc-xiongwai-glyy-1",
+   "name": "许明辉",
+   "title": "副主任医师",
+   "deptId": "d-xiongwai",
+   "campusId": "c-glyy",
+   "avatar": "👨‍⚕️",
+   "intro": "胸外科副主任医师，擅长肺结节、食管癌、胸痛等常见病、多发病的诊治。",
+   "specialties": [
+    "肺结节",
+    "食管癌",
+    "胸痛"
+   ]
+  },
+  {
+   "id": "doc-fuke-jsph-1",
+   "name": "段晓东",
+   "title": "副主任医师",
+   "deptId": "d-fuke",
+   "campusId": "c-jsph",
+   "avatar": "👨‍⚕️",
+   "intro": "妇科副主任医师，擅长月经不调、白带异常、妇科炎症等常见病、多发病的诊治。",
+   "specialties": [
+    "月经不调",
+    "白带异常",
+    "妇科炎症"
+   ]
+  },
+  {
+   "id": "doc-fuke-glyy-1",
+   "name": "万雅琴",
+   "title": "副主任医师",
+   "deptId": "d-fuke",
+   "campusId": "c-glyy",
+   "avatar": "👨‍⚕️",
+   "intro": "妇科副主任医师，擅长月经不调、白带异常、妇科炎症等常见病、多发病的诊治。",
+   "specialties": [
+    "月经不调",
+    "白带异常",
+    "妇科炎症"
+   ]
+  },
+  {
+   "id": "doc-chanke-jsph-1",
+   "name": "李静怡",
+   "title": "主任医师",
+   "deptId": "d-chanke",
+   "campusId": "c-jsph",
+   "avatar": "👩‍⚕️",
+   "intro": "产科主任医师，擅长产检、怀孕、孕期等常见病、多发病的诊治。",
+   "specialties": [
+    "产检",
+    "怀孕",
+    "孕期"
+   ]
+  },
+  {
+   "id": "doc-chanke-glyy-1",
+   "name": "吴永强",
+   "title": "副主任医师",
+   "deptId": "d-chanke",
+   "campusId": "c-glyy",
+   "avatar": "👨‍⚕️",
+   "intro": "产科副主任医师，擅长产检、怀孕、孕期等常见病、多发病的诊治。",
+   "specialties": [
+    "产检",
+    "怀孕",
+    "孕期"
+   ]
+  },
+  {
+   "id": "doc-erke-jsph-1",
+   "name": "徐燕",
+   "title": "副主任医师",
+   "deptId": "d-erke",
+   "campusId": "c-jsph",
+   "avatar": "👩‍⚕️",
+   "intro": "儿科副主任医师，擅长儿童发热、咳嗽、腹泻等常见病、多发病的诊治。",
+   "specialties": [
+    "儿童发热",
+    "咳嗽",
+    "腹泻"
+   ]
+  },
+  {
+   "id": "doc-erke-glyy-1",
+   "name": "袁雅琴",
+   "title": "副主任医师",
+   "deptId": "d-erke",
+   "campusId": "c-glyy",
+   "avatar": "👨‍⚕️",
+   "intro": "儿科副主任医师，擅长儿童发热、咳嗽、腹泻等常见病、多发病的诊治。",
+   "specialties": [
+    "儿童发热",
+    "咳嗽",
+    "腹泻"
+   ]
+  },
+  {
+   "id": "doc-yanke-jsph-1",
+   "name": "江嘉怡",
+   "title": "主任医师",
+   "deptId": "d-yanke",
+   "campusId": "c-jsph",
+   "avatar": "👩‍⚕️",
+   "intro": "眼科主任医师，擅长视力下降、白内障、近视等常见病、多发病的诊治。",
+   "specialties": [
+    "视力下降",
+    "白内障",
+    "近视"
+   ]
+  },
+  {
+   "id": "doc-yanke-glyy-1",
+   "name": "姜春华",
+   "title": "主任医师",
+   "deptId": "d-yanke",
+   "campusId": "c-glyy",
+   "avatar": "👨‍⚕️",
+   "intro": "眼科主任医师，擅长视力下降、白内障、近视等常见病、多发病的诊治。",
+   "specialties": [
+    "视力下降",
+    "白内障",
+    "近视"
+   ]
+  },
+  {
+   "id": "doc-erbihou-jsph-1",
+   "name": "韦忠华",
+   "title": "副主任医师",
+   "deptId": "d-erbihou",
+   "campusId": "c-jsph",
+   "avatar": "👩‍⚕️",
+   "intro": "耳鼻喉科副主任医师，擅长鼻塞、流鼻涕、耳鸣等常见病、多发病的诊治。",
+   "specialties": [
+    "鼻塞",
+    "流鼻涕",
+    "耳鸣"
+   ]
+  },
+  {
+   "id": "doc-erbihou-glyy-1",
+   "name": "蒋浩然",
+   "title": "主任医师",
+   "deptId": "d-erbihou",
+   "campusId": "c-glyy",
+   "avatar": "👩‍⚕️",
+   "intro": "耳鼻喉科主任医师，擅长鼻塞、流鼻涕、耳鸣等常见病、多发病的诊治。",
+   "specialties": [
+    "鼻塞",
+    "流鼻涕",
+    "耳鸣"
+   ]
+  },
+  {
+   "id": "doc-kouqiang-jsph-1",
+   "name": "魏婷",
+   "title": "主任医师",
+   "deptId": "d-kouqiang",
+   "campusId": "c-jsph",
+   "avatar": "👨‍⚕️",
+   "intro": "口腔科主任医师，擅长牙痛、拔牙、口腔溃疡等常见病、多发病的诊治。",
+   "specialties": [
+    "牙痛",
+    "拔牙",
+    "口腔溃疡"
+   ]
+  },
+  {
+   "id": "doc-kouqiang-glyy-1",
+   "name": "邓燕",
+   "title": "主任医师",
+   "deptId": "d-kouqiang",
+   "campusId": "c-glyy",
+   "avatar": "👨‍⚕️",
+   "intro": "口腔科主任医师，擅长牙痛、拔牙、口腔溃疡等常见病、多发病的诊治。",
+   "specialties": [
+    "牙痛",
+    "拔牙",
+    "口腔溃疡"
+   ]
+  },
+  {
+   "id": "doc-pifuke-jsph-1",
+   "name": "程振宇",
+   "title": "主任医师",
+   "deptId": "d-pifuke",
+   "campusId": "c-jsph",
+   "avatar": "👨‍⚕️",
+   "intro": "皮肤科主任医师，擅长湿疹、皮炎、痤疮等常见病、多发病的诊治。",
+   "specialties": [
+    "湿疹",
+    "皮炎",
+    "痤疮"
+   ]
+  },
+  {
+   "id": "doc-pifuke-glyy-1",
+   "name": "段子涵",
+   "title": "副主任医师",
+   "deptId": "d-pifuke",
+   "campusId": "c-glyy",
+   "avatar": "👨‍⚕️",
+   "intro": "皮肤科副主任医师，擅长湿疹、皮炎、痤疮等常见病、多发病的诊治。",
+   "specialties": [
+    "湿疹",
+    "皮炎",
+    "痤疮"
+   ]
+  },
+  {
+   "id": "doc-zhongliu-jsph-1",
+   "name": "方晓东",
+   "title": "副主任医师",
+   "deptId": "d-zhongliu",
+   "campusId": "c-jsph",
+   "avatar": "👨‍⚕️",
+   "intro": "肿瘤科副主任医师，擅长肿瘤、化疗、放疗等常见病、多发病的诊治。",
+   "specialties": [
+    "肿瘤",
+    "化疗",
+    "放疗"
+   ]
+  },
+  {
+   "id": "doc-zhongliu-glyy-1",
+   "name": "戴志刚",
+   "title": "副主任医师",
+   "deptId": "d-zhongliu",
+   "campusId": "c-glyy",
+   "avatar": "👨‍⚕️",
+   "intro": "肿瘤科副主任医师，擅长肿瘤、化疗、放疗等常见病、多发病的诊治。",
+   "specialties": [
+    "肿瘤",
+    "化疗",
+    "放疗"
+   ]
+  },
+  {
+   "id": "doc-zhongyi-jsph-1",
+   "name": "杨燕",
+   "title": "主任医师",
+   "deptId": "d-zhongyi",
+   "campusId": "c-jsph",
+   "avatar": "👨‍⚕️",
+   "intro": "中医科主任医师，擅长调理、针灸、推拿等常见病、多发病的诊治。",
+   "specialties": [
+    "调理",
+    "针灸",
+    "推拿"
+   ]
+  },
+  {
+   "id": "doc-zhongyi-glyy-1",
+   "name": "武鹏",
+   "title": "主任医师",
+   "deptId": "d-zhongyi",
+   "campusId": "c-glyy",
+   "avatar": "👨‍⚕️",
+   "intro": "中医科主任医师，擅长调理、针灸、推拿等常见病、多发病的诊治。",
+   "specialties": [
+    "调理",
+    "针灸",
+    "推拿"
+   ]
+  },
+  {
+   "id": "doc-jiyi-jsph-1",
+   "name": "陶浩然",
+   "title": "主任医师",
+   "deptId": "d-jiyi",
+   "campusId": "c-jsph",
+   "avatar": "👨‍⚕️",
+   "intro": "老年医学科主任医师，擅长老年体检、慢性病管理、多重用药等常见病、多发病的诊治。",
+   "specialties": [
+    "老年体检",
+    "慢性病管理",
+    "多重用药"
+   ]
+  },
+  {
+   "id": "doc-jiyi-jsph-2",
+   "name": "莫玉兰",
+   "title": "副主任医师",
+   "deptId": "d-jiyi",
+   "campusId": "c-jsph",
+   "avatar": "👩‍⚕️",
+   "intro": "老年医学科副主任医师，擅长老年体检、慢性病管理、多重用药等常见病、多发病的诊治。",
+   "specialties": [
+    "老年体检",
+    "慢性病管理",
+    "多重用药"
+   ]
+  },
+  {
+   "id": "doc-jiyi-glyy-1",
+   "name": "郝振宇",
+   "title": "主任医师",
+   "deptId": "d-jiyi",
+   "campusId": "c-glyy",
+   "avatar": "👨‍⚕️",
+   "intro": "老年医学科主任医师，擅长老年体检、慢性病管理、多重用药等常见病、多发病的诊治。",
+   "specialties": [
+    "老年体检",
+    "慢性病管理",
+    "多重用药"
+   ]
+  },
+  {
+   "id": "doc-jiyi-glyy-2",
+   "name": "韩忠华",
+   "title": "副主任医师",
+   "deptId": "d-jiyi",
+   "campusId": "c-glyy",
+   "avatar": "👩‍⚕️",
+   "intro": "老年医学科副主任医师，擅长老年体检、慢性病管理、多重用药等常见病、多发病的诊治。",
+   "specialties": [
+    "老年体检",
+    "慢性病管理",
+    "多重用药"
    ]
   }
  ],
@@ -422,629 +1323,8 @@
    "member": "child"
   }
  ],
- "doctors": [
-  {
-   "id": "doc-g1",
-   "name": "张明远",
-   "title": "副主任医师",
-   "deptId": "d-guke",
-   "avatar": "👨‍⚕️",
-   "intro": "从事骨科临床20年，擅长膝关节、髋关节疾病诊治。",
-   "specialties": [
-    "膝关节",
-    "髋关节",
-    "关节疼痛",
-    "膝盖疼",
-    "骨关节炎"
-   ]
-  },
-  {
-   "id": "doc-g2",
-   "name": "李建华",
-   "title": "主治医师",
-   "deptId": "d-guke",
-   "avatar": "👨‍⚕️",
-   "intro": "专注运动损伤与关节镜微创治疗。",
-   "specialties": [
-    "运动损伤",
-    "半月板",
-    "韧带损伤",
-    "扭伤"
-   ]
-  },
-  {
-   "id": "doc-g3",
-   "name": "周建国",
-   "title": "主任医师",
-   "deptId": "d-guke",
-   "avatar": "👨‍⚕️",
-   "intro": "脊柱外科专家，擅长腰椎间盘突出、颈椎病手术。",
-   "specialties": [
-    "腰椎间盘突出",
-    "颈椎病",
-    "腰痛",
-    "脊柱"
-   ]
-  },
-  {
-   "id": "doc-g4",
-   "name": "陈晓燕",
-   "title": "副主任医师",
-   "deptId": "d-guke",
-   "avatar": "👩‍⚕️",
-   "intro": "擅长骨折修复、创伤骨科、老年骨折。",
-   "specialties": [
-    "骨折",
-    "创伤",
-    "老年骨折",
-    "腿疼"
-   ]
-  },
-  {
-   "id": "doc-x1",
-   "name": "陈志强",
-   "title": "主任医师",
-   "deptId": "d-xinneike",
-   "avatar": "👨‍⚕️",
-   "intro": "冠心病、高血压综合管理，冠脉介入手术。",
-   "specialties": [
-    "冠心病",
-    "高血压",
-    "心悸",
-    "胸痛"
-   ]
-  },
-  {
-   "id": "doc-x2",
-   "name": "林秀芳",
-   "title": "副主任医师",
-   "deptId": "d-xinneike",
-   "avatar": "👩‍⚕️",
-   "intro": "心律失常诊治，起搏器植入。",
-   "specialties": [
-    "心律失常",
-    "心慌",
-    "胸闷",
-    "心动过速"
-   ]
-  },
-  {
-   "id": "doc-x3",
-   "name": "赵明",
-   "title": "主治医师",
-   "deptId": "d-xinneike",
-   "avatar": "👨‍⚕️",
-   "intro": "心力衰竭综合管理。",
-   "specialties": [
-    "心衰",
-    "水肿",
-    "气喘",
-    "心力衰竭"
-   ]
-  },
-  {
-   "id": "doc-h1",
-   "name": "王大海",
-   "title": "主任医师",
-   "deptId": "d-huxi",
-   "avatar": "👨‍⚕️",
-   "intro": "慢阻肺、哮喘、肺结节诊治。",
-   "specialties": [
-    "慢阻肺",
-    "哮喘",
-    "气喘",
-    "肺结节"
-   ]
-  },
-  {
-   "id": "doc-h2",
-   "name": "刘小红",
-   "title": "副主任医师",
-   "deptId": "d-huxi",
-   "avatar": "👩‍⚕️",
-   "intro": "肺部感染、慢性咳嗽诊治。",
-   "specialties": [
-    "肺炎",
-    "咳嗽",
-    "发热",
-    "肺部感染"
-   ]
-  },
-  {
-   "id": "doc-h3",
-   "name": "孙伟",
-   "title": "主治医师",
-   "deptId": "d-huxi",
-   "avatar": "👨‍⚕️",
-   "intro": "呼吸睡眠障碍诊治。",
-   "specialties": [
-    "打鼾",
-    "睡眠呼吸暂停",
-    "失眠"
-   ]
-  },
-  {
-   "id": "doc-xh1",
-   "name": "黄丽华",
-   "title": "主任医师",
-   "deptId": "d-xiaohua",
-   "avatar": "👩‍⚕️",
-   "intro": "胃肠镜专家，早期胃肠肿瘤筛查。",
-   "specialties": [
-    "胃痛",
-    "胃胀",
-    "胃肠镜",
-    "胃溃疡"
-   ]
-  },
-  {
-   "id": "doc-xh2",
-   "name": "吴刚",
-   "title": "副主任医师",
-   "deptId": "d-xiaohua",
-   "avatar": "👨‍⚕️",
-   "intro": "肝胆胰疾病，脂肪肝诊治。",
-   "specialties": [
-    "脂肪肝",
-    "肝功能异常",
-    "胆结石",
-    "反酸"
-   ]
-  },
-  {
-   "id": "doc-xh3",
-   "name": "郑芳",
-   "title": "主治医师",
-   "deptId": "d-xiaohua",
-   "avatar": "👩‍⚕️",
-   "intro": "炎症性肠病、腹泻便秘诊治。",
-   "specialties": [
-    "腹泻",
-    "便秘",
-    "肠炎",
-    "IBD"
-   ]
-  },
-  {
-   "id": "doc-s1",
-   "name": "马文涛",
-   "title": "主任医师",
-   "deptId": "d-shenjing",
-   "avatar": "👨‍⚕️",
-   "intro": "脑血管病、中风康复。",
-   "specialties": [
-    "中风",
-    "头晕",
-    "头痛",
-    "脑梗"
-   ]
-  },
-  {
-   "id": "doc-s2",
-   "name": "赵丽",
-   "title": "副主任医师",
-   "deptId": "d-shenjing",
-   "avatar": "👩‍⚕️",
-   "intro": "帕金森、癫痫、头痛诊治。",
-   "specialties": [
-    "帕金森",
-    "癫痫",
-    "头痛",
-    "手抖",
-    "手脚发麻"
-   ]
-  },
-  {
-   "id": "doc-n1",
-   "name": "钱伟",
-   "title": "主任医师",
-   "deptId": "d-neifenmi",
-   "avatar": "👨‍⚕️",
-   "intro": "糖尿病及其并发症综合管理。",
-   "specialties": [
-    "糖尿病",
-    "血糖",
-    "甲亢",
-    "甲减"
-   ]
-  },
-  {
-   "id": "doc-n2",
-   "name": "孙丽娟",
-   "title": "副主任医师",
-   "deptId": "d-neifenmi",
-   "avatar": "👩‍⚕️",
-   "intro": "甲状腺疾病、骨质疏松诊治。",
-   "specialties": [
-    "甲状腺",
-    "骨质疏松",
-    "肥胖",
-    "甲减"
-   ]
-  },
-  {
-   "id": "doc-p1",
-   "name": "赵伟",
-   "title": "主治医师",
-   "deptId": "d-puwai",
-   "avatar": "👨‍⚕️",
-   "intro": "甲状腺、乳腺结节手术。",
-   "specialties": [
-    "甲状腺结节",
-    "乳腺结节",
-    "疝气"
-   ]
-  },
-  {
-   "id": "doc-p2",
-   "name": "刘强",
-   "title": "主任医师",
-   "deptId": "d-puwai",
-   "avatar": "👨‍⚕️",
-   "intro": "胃肠肿瘤微创手术。",
-   "specialties": [
-    "阑尾炎",
-    "胆结石",
-    "胃肠肿瘤"
-   ]
-  },
-  {
-   "id": "doc-m1",
-   "name": "陈刚",
-   "title": "主任医师",
-   "deptId": "d-miniao",
-   "avatar": "👨‍⚕️",
-   "intro": "前列腺增生、肾结石微创手术。",
-   "specialties": [
-    "前列腺增生",
-    "肾结石",
-    "血尿"
-   ]
-  },
-  {
-   "id": "doc-m2",
-   "name": "王磊",
-   "title": "副主任医师",
-   "deptId": "d-miniao",
-   "avatar": "👨‍⚕️",
-   "intro": "膀胱疾病、尿路感染。",
-   "specialties": [
-    "尿频",
-    "尿急",
-    "尿痛",
-    "膀胱炎"
-   ]
-  },
-  {
-   "id": "doc-f1",
-   "name": "李梅",
-   "title": "主任医师",
-   "deptId": "d-fuke",
-   "avatar": "👩‍⚕️",
-   "intro": "妇科炎症、月经不调诊治。",
-   "specialties": [
-    "月经不调",
-    "妇科炎症",
-    "痛经"
-   ]
-  },
-  {
-   "id": "doc-f2",
-   "name": "张静",
-   "title": "副主任医师",
-   "deptId": "d-fuke",
-   "avatar": "👩‍⚕️",
-   "intro": "妇科肿瘤筛查与治疗。",
-   "specialties": [
-    "妇科体检",
-    "宫颈筛查",
-    "白带异常"
-   ]
-  },
-  {
-   "id": "doc-e1",
-   "name": "周晓",
-   "title": "主任医师",
-   "deptId": "d-erke",
-   "avatar": "👨‍⚕️",
-   "intro": "儿童常见病、呼吸道感染。",
-   "specialties": [
-    "儿童发热",
-    "咳嗽",
-    "感冒",
-    "肺炎"
-   ]
-  },
-  {
-   "id": "doc-e2",
-   "name": "吴婷",
-   "title": "副主任医师",
-   "deptId": "d-erke",
-   "avatar": "👩‍⚕️",
-   "intro": "儿童生长发育、营养管理。",
-   "specialties": [
-    "生长发育",
-    "湿疹",
-    "腹泻",
-    "营养不良"
-   ]
-  },
-  {
-   "id": "doc-y1",
-   "name": "孙丽",
-   "title": "主任医师",
-   "deptId": "d-yanke",
-   "avatar": "👩‍⚕️",
-   "intro": "白内障手术、近视矫正。",
-   "specialties": [
-    "白内障",
-    "近视",
-    "视力下降"
-   ]
-  },
-  {
-   "id": "doc-y2",
-   "name": "马晓",
-   "title": "副主任医师",
-   "deptId": "d-yanke",
-   "avatar": "👨‍⚕️",
-   "intro": "眼底病变、青光眼诊治。",
-   "specialties": [
-    "眼底病变",
-    "青光眼",
-    "飞蚊症",
-    "眼痛"
-   ]
-  },
-  {
-   "id": "doc-ebh1",
-   "name": "刘洋",
-   "title": "主任医师",
-   "deptId": "d-erbihou",
-   "avatar": "👨‍⚕️",
-   "intro": "鼻炎、鼻窦炎诊治。",
-   "specialties": [
-    "鼻塞",
-    "流鼻涕",
-    "鼻炎",
-    "鼻窦炎"
-   ]
-  },
-  {
-   "id": "doc-ebh2",
-   "name": "陈雪",
-   "title": "副主任医师",
-   "deptId": "d-erbihou",
-   "avatar": "👩‍⚕️",
-   "intro": "中耳炎、听力下降、咽炎。",
-   "specialties": [
-    "耳鸣",
-    "听力下降",
-    "中耳炎",
-    "咽炎",
-    "嗓子疼"
-   ]
-  },
-  {
-   "id": "doc-kq1",
-   "name": "王强",
-   "title": "主任医师",
-   "deptId": "d-kouqiang",
-   "avatar": "👨‍⚕️",
-   "intro": "牙体牙髓、拔牙、种植牙。",
-   "specialties": [
-    "牙痛",
-    "拔牙",
-    "种植牙",
-    "牙龈出血"
-   ]
-  },
-  {
-   "id": "doc-kq2",
-   "name": "赵敏",
-   "title": "主治医师",
-   "deptId": "d-kouqiang",
-   "avatar": "👩‍⚕️",
-   "intro": "口腔正畸、洗牙。",
-   "specialties": [
-    "正畸",
-    "洗牙",
-    "口腔溃疡"
-   ]
-  },
-  {
-   "id": "doc-pf1",
-   "name": "刘芳",
-   "title": "副主任医师",
-   "deptId": "d-pifuke",
-   "avatar": "👩‍⚕️",
-   "intro": "湿疹、皮炎、皮肤过敏诊治。",
-   "specialties": [
-    "湿疹",
-    "皮炎",
-    "皮肤过敏",
-    "荨麻疹"
-   ]
-  },
-  {
-   "id": "doc-pf2",
-   "name": "李军",
-   "title": "主治医师",
-   "deptId": "d-pifuke",
-   "avatar": "👨‍⚕️",
-   "intro": "痤疮、皮肤美容。",
-   "specialties": [
-    "痤疮",
-    "皮肤瘙痒",
-    "皮肤美容"
-   ]
-  },
-  {
-   "id": "doc-zy1",
-   "name": "张老",
-   "title": "主任医师",
-   "deptId": "d-zhongyi",
-   "avatar": "👨‍⚕️",
-   "intro": "中医调理、针灸推拿40年经验。",
-   "specialties": [
-    "调理",
-    "针灸",
-    "推拿",
-    "气血不足"
-   ]
-  },
-  {
-   "id": "doc-zy2",
-   "name": "王草药",
-   "title": "副主任医师",
-   "deptId": "d-zhongyi",
-   "avatar": "👩‍⚕️",
-   "intro": "慢性病中医综合管理。",
-   "specialties": [
-    "慢性病调理",
-    "失眠",
-    "脾胃虚弱"
-   ]
-  },
-  {
-   "id": "doc-jy1",
-   "name": "陈老",
-   "title": "主任医师",
-   "deptId": "d-jiyi",
-   "avatar": "👨‍⚕️",
-   "intro": "老年综合评估、慢性病管理。",
-   "specialties": [
-    "老年体检",
-    "慢性病管理",
-    "多重用药"
-   ]
-  },
-  {
-   "id": "doc-jy2",
-   "name": "林静",
-   "title": "副主任医师",
-   "deptId": "d-jiyi",
-   "avatar": "👩‍⚕️",
-   "intro": "跌倒预防、老年营养。",
-   "specialties": [
-    "跌倒预防",
-    "老年营养",
-    "骨质疏松"
-   ]
-  },
-  {
-   "id": "doc-sh1",
-   "name": "何明",
-   "title": "主任医师",
-   "deptId": "d-shen",
-   "avatar": "👨‍⚕️",
-   "intro": "肾炎、肾衰竭、透析管理。",
-   "specialties": [
-    "肾炎",
-    "浮肿",
-    "尿频",
-    "肾衰竭"
-   ]
-  },
-  {
-   "id": "doc-nw1",
-   "name": "杨刀",
-   "title": "主任医师",
-   "deptId": "d-naiwai",
-   "avatar": "👨‍⚕️",
-   "intro": "脑肿瘤、脑血管手术。",
-   "specialties": [
-    "脑肿瘤",
-    "脑出血",
-    "脑梗"
-   ]
-  },
-  {
-   "id": "doc-xw1",
-   "name": "胸腔",
-   "title": "副主任医师",
-   "deptId": "d-xiongwai",
-   "avatar": "👨‍⚕️",
-   "intro": "肺结节、食管手术。",
-   "specialties": [
-    "肺结节",
-    "食管癌",
-    "气胸"
-   ]
-  },
-  {
-   "id": "doc-ck1",
-   "name": "产妈",
-   "title": "主任医师",
-   "deptId": "d-chanke",
-   "avatar": "👩‍⚕️",
-   "intro": "产检、孕期管理、分娩。",
-   "specialties": [
-    "产检",
-    "怀孕",
-    "孕期"
-   ]
-  },
-  {
-   "id": "doc-zl1",
-   "name": "化疗",
-   "title": "主任医师",
-   "deptId": "d-zhongliu",
-   "avatar": "👨‍⚕️",
-   "intro": "肿瘤化疗、放疗、综合治疗。",
-   "specialties": [
-    "肿瘤",
-    "化疗",
-    "放疗"
-   ]
-  },
-  {
-   "id": "doc-nk1",
-   "name": "全科",
-   "title": "主治医师",
-   "deptId": "d-neike",
-   "avatar": "👩‍⚕️",
-   "intro": "常见病初诊、健康体检。",
-   "specialties": [
-    "发热",
-    "感冒",
-    "乏力",
-    "体检"
-   ]
-  }
- ],
- "hospital": {
-  "name": "附近两家医院 · 模拟挂号",
-  "lockMinutes": 15
- },
- "hospitals": [
-  {
-   "id": "amap-B001909Z1X",
-   "poiId": "B001909Z1X",
-   "name": "南京医科大学第二附属医院(萨家湾院区)",
-   "address": "挹江门街道中山北路309号",
-   "lng": 118.756361,
-   "lat": 32.0835,
-   "level": "三级甲等",
-   "distanceKm": 0.76,
-   "source": "高德 MCP",
-   "queriedAt": "2026-10-31T02:47:22.058233+00:00",
-   "locationPrecision": "道路",
-   "originAddress": "南京市鼓楼区中山北路"
-  },
-  {
-   "id": "amap-B001905128",
-   "poiId": "B001905128",
-   "name": "南京市第二医院(钟阜院区)",
-   "address": "钟阜路1-1号",
-   "lng": 118.768137,
-   "lat": 32.088873,
-   "level": "三级甲等",
-   "distanceKm": 1.32,
-   "source": "高德 MCP",
-   "queriedAt": "2026-10-31T02:47:22.336923+00:00",
-   "locationPrecision": "道路",
-   "originAddress": "南京市鼓楼区中山北路"
-  }
- ]
+ "site": {
+  "lockMinutes": 15,
+  "note": "医院名称、地址、坐标来自高德地图公开数据；科室排班、医生、号源、病历均为虚构演示数据。"
+ }
 }

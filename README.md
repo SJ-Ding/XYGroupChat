@@ -8,7 +8,7 @@
 - 长辈屏：`http://localhost:8000/?user=mom&elder=1`（大字大按钮、语音输入、念给我听）
 - 模拟医院：`http://localhost:8000/hospital/`（号源、收银台、我的预约与电子病历）
 
-首次启动自动写入虚构的演示家庭（王秀兰 62 岁半月板旧伤、林志强 65 岁高血压、女儿小林在上海）。`.env` 里配置 `DEEPSEEK_API_KEY` 启用大模型，配置 `AMAP_MCP_URL=https://mcp.amap.com/mcp?key=你的Key` 启用高德地图；都不配也能完整演示（规则兜底、直线距离估算）。
+首次启动自动写入虚构的演示家庭（王秀兰 62 岁半月板旧伤、林志强 65 岁高血压、女儿小林在上海）。可选模拟医院为江苏省人民医院、南京鼓楼医院，医院名称与地址来自高德公开数据，其余医生、号源和病历均为虚构。`.env` 里配置 `DEEPSEEK_API_KEY` 启用大模型，配置 `DEEPSEEK_VISION_MODEL` 指定可识图模型，配置 `AMAP_MCP_URL=https://mcp.amap.com/mcp?key=你的Key` 启用高德地图；未配置时使用规则和文字医嘱兜底。
 
 - 演示脚本与讲解词：[docs/家人帮_演示指南.md](docs/家人帮_演示指南.md)
 - 模块边界与验收标准：[docs/家人帮_模块边界与验收标准.md](docs/家人帮_模块边界与验收标准.md)
@@ -49,6 +49,8 @@ cd XYGroupChat
 
 模拟医院已作为项目内模块随主服务启动，地址为 `http://localhost:8000/hospital/`。在聊天中可直接说“打开模拟医院”或“帮我预约骨科上午的号”，小艺会通过 `hospital_simulator` 工具启动浏览器任务。预约会先停在核对页并发出确认卡片，只有当前用户点击“确认并继续”才会提交。实现与调试说明见 [hospital/README.md](hospital/README.md)。
 
+两家医院分别使用独立应用路由 `/hospital/apps/h-jsph/` 和 `/hospital/apps/h-glyy/`，对应 API 也按医院隔离。查号与办理共用当前 Skill 和 `hospital_simulator`：查询不启动浏览器，办理选定号源后由自动化执行器填写到确认页，锁号后仍在本人收银台完成模拟支付。
+
 需要演示聊天与记忆时运行 `start.ps1 -Demo`，或手动 `python -m backend.demo`（需使用项目虚拟环境）。演示记录均带有 **【演示】** 标记，不会触发后台记忆提取。默认不添加虚构的家庭事实。
 
 局域网使用 `start.ps1 -Bind 0.0.0.0`，其他设备访问电脑的局域网 IP 和 8000 端口。手机与电脑需在同一网络。默认只监听本机；此版本不包含公网注册、HTTPS 网关或多进程部署。
@@ -61,12 +63,14 @@ cd XYGroupChat
 DEEPSEEK_API_KEY=在本地填写
 DEEPSEEK_BASE_URL=https://api.deepseek.com
 DEEPSEEK_MODEL=deepseek-flash
+# 需要图片输入能力；留空时回退到 DEEPSEEK_MODEL
+DEEPSEEK_VISION_MODEL=
 DATA_DIR=data
 ```
 
 变更模型配置后重启。界面中的 Agent 名称、系统提示词、自主介入开关、观察窗口即时保存到数据库。REST、图片和 WebSocket 请求都显式携带同一 `user` 参数。此演示模式的身份由 URL 自行选择，访问者可切换为任意家庭成员。
 
-模型适配器采用官方 OpenAI 兼容 Chat Completions 格式，支持图片块、JSON 判断和工具调用。实际可用模型及额度取决于账号。模型失败不会阻止家人聊天；设置页显示失败原因并可重试。
+模型适配器采用官方 OpenAI 兼容 Chat Completions 格式，支持图片块、JSON 判断和工具调用。病历和药单图片可通过独立视觉模型识别；模型名、超时和兼容中转参数见 `.env.example`。实际可用模型及额度取决于账号。模型失败不会阻止家人聊天或文字医嘱整理；设置页显示失败原因并可重试。
 
 ## 使用流程
 
@@ -126,7 +130,7 @@ Vite 在 5173 端口代理 `/api` 与 `/ws` 至 8000；生产构建由 FastAPI �
 - `backend/memory_lifecycle.py`：即时短期记忆、同事项更新、周期整理与审计；`backend/persona.py`：小艺的身份与陪伴风格。
 - `backend/skills.py`：可信 Skill 注册与执行协议；扩展说明见 `skills/family/SKILL.md`。
 - `frontend/src`：响应式聊天界面、记忆、待办、设置与成员切换。
-- `hospital`：虚构医院网页、预约数据与受限的 DOM 浏览器执行器。
+- `hospital`：江苏省人民医院、南京鼓楼医院的模拟网页、按院号源隔离、预约支付与受限 DOM 浏览器执行器。
 - `tests`：隔离临时数据库及模拟模型；不消耗真实模型额度。
 
 `data/family.db` 保存账号会话、群关系、消息、记忆和版本化应用记录，`data/uploads` 保存受群权限保护的图片。SQLite FTS5 是本地索引，无需 Redis、向量库或 Embedding 服务。迁移版本记录在 `schema_migrations`；后续表结构变更需增加显式迁移。备份请停止服务后复制整个 `data` 目录。
@@ -135,6 +139,6 @@ Vite 在 5173 端口代理 `/api` 与 `/ws` 至 8000；生产构建由 FastAPI �
 
 每条人类消息与分析任务同事务写入；消息先持久化再广播。客户端和 Agent 使用唯一键去重。群内生成配置按任务保存快照；设置修改会取消旧的待发候选。工具幂等结果与业务键共同处理重试。初版必须单进程运行，不要增加 `uvicorn --workers`。
 
-验收与视觉对照记录见 [docs/QA.md](docs/QA.md)。最新 Harness 验证包含56项后端测试、12条离线策略样例和桌面/手机完整流程；早期真实 DeepSeek 记忆、看图与30秒自主跟进的实测保留在历史记录中。
+验收与视觉对照记录见 [docs/QA.md](docs/QA.md)。当前后端回归包含医院隔离、挂号生命周期、病历识图、识图缓存、医疗档案、计划确认和旧数据升级；医院前端执行 TypeScript 检查与生产构建。
 
 家庭聊天、私人会话及其检索出的记忆会发送给配置的模型服务。任务规划只发送本次填写的目标与工具定义，不附带存储记忆。此版不提供消息撤回、任意脚本 Skill、语音视频、外部日历或系统推送；调度仍需服务保持运行。

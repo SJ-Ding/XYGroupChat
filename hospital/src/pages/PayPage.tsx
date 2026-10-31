@@ -59,7 +59,7 @@ export function PayPage() {
         <div className="flex items-center justify-between px-6 py-4 text-white" style={{ background: 'linear-gradient(90deg,#0F766E,#176A9B)' }}>
           <div>
             <div className="text-xs text-white/70">家人帮 · 模拟收银台</div>
-            <div className="mt-0.5 font-semibold" style={{ fontSize: 18 }}>{appt.campusName} · 挂号费</div>
+            <div className="mt-0.5 font-semibold" style={{ fontSize: 18 }}>{appt.hospitalName || "演示医院"} · 挂号费</div>
           </div>
           <ShieldCheck className="h-8 w-8 text-white/70" />
         </div>

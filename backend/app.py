@@ -43,6 +43,8 @@ agent = Agent(broadcast, now=democlock.now)
 @asynccontextmanager
 async def lifespan(app):
     migrate()
+    from .aftercare_migration import cleanup_legacy_prognosis
+    cleanup_legacy_prognosis()
     from .care_seed import autoseed
     autoseed()
     from .hospital_simulator import set_event_loop, automation
@@ -247,27 +249,6 @@ def memories(gid: int, q: str = '', domain: Optional[str] = None, user=Depends(c
         if domain:
             mems = [m for m in mems if m.get('domain', 'general') == domain]
         return mems
-
-class PrognosisAction(BaseModel):
-    action: str
-    enabled: list[str] | None = None
-
-@app.post('/api/groups/{gid}/prognosis/{key}/act')
-async def prognosis_action(gid: int, key: str, body: PrognosisAction, user=Depends(current)):
-    if gid < 0:
-        if gid != -user['id']:
-            raise HTTPException(403, '无此会话权限')
-    else:
-        access(gid, user)
-    from .prognosis import activate
-    with DB() as db:
-        r = get(db, 'card', gid, key)
-        if not r or not r.data.get('care', {}).get('data', {}).get('prognosis'):
-            raise HTTPException(404, '计划不存在')
-        result = activate(db, gid, r.data, body.action, body.enabled, user['id'])
-        db.commit()
-    await broadcast(gid, {'type': 'refresh'})
-    return result
 
 class BackfillBody(BaseModel):
     preview: bool = True

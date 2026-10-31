@@ -87,16 +87,16 @@ def test_slots_are_deterministic_and_story_slots_pinned():
     first, second = H.generate_slots(), H.generate_slots()
     assert first == second
     tomorrow = democlock.shift_date(democlock.today(), 1)
-    familiar = [s for s in H.find_slots('d-guke', tomorrow, 'morning', 'c-main', 'doc-g1')]
+    familiar = [s for s in H.find_slots('d-guke', tomorrow, 'morning', 'c-jsph', 'doc-g1')]
     assert any(s['startTime'] == '08:30' and s['status'] == 'available' for s in familiar)
-    east = H.find_slots('d-guke', tomorrow, 'morning', 'c-east')
+    east = H.find_slots('d-guke', tomorrow, 'morning', 'c-glyy')
     assert east and all(s['status'] != 'available' for s in east)
     assert H.slot(familiar[0]['id'])['id'] == familiar[0]['id']
 
 
 def test_booking_without_child_authorization_decrements_slot():
     tomorrow = democlock.shift_date(democlock.today(), 1)
-    slot = next(s for s in H.find_slots('d-guke', tomorrow, 'morning', 'c-main', 'doc-g1') if s['startTime'] == '08:30')
+    slot = next(s for s in H.find_slots('d-guke', tomorrow, 'morning', 'c-jsph', 'doc-g1') if s['startTime'] == '08:30')
     with DB() as db:
         appt = H.create_appointment(db, slot['id'], 'p-001', 'task-1')
         again = H.create_appointment(db, slot['id'], 'p-001', 'task-1')
@@ -228,4 +228,4 @@ async def test_query_department_without_patient_never_books(monkeypatch):
     with DB() as db:
         reply = db.query(Message).filter_by(group_id=1, user_id=0).order_by(Message.id.desc()).first()
         assert '模拟号源' in reply.content
-        assert all(c['name'] in reply.content for c in H.catalog()['campuses'])
+        assert all(H.place(c['id']) in reply.content for c in H.catalog()['campuses'])

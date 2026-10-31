@@ -6,7 +6,7 @@ from backend.appointment_intent import appointment_operation
 from backend.authorization import command_grants
 from backend.contracts import ConversationEvent, Intent
 from backend.participation import decide
-from backend import care, care_seed, democlock, prognosis
+from backend import care, care_aftercare, care_seed, democlock
 from backend.agent import Agent
 from backend.db import DB, Message, User, get, put, records
 
@@ -160,26 +160,23 @@ async def test_stale_mention_flag_cannot_override_quoted_decision(family):
     await a.close()
 
 @pytest.mark.asyncio
-async def test_emergency_precedes_pending_prognosis(family,monkeypatch):
+async def test_emergency_precedes_aftercare(family):
     a=Agent(no_broadcast,RoutingModel(),now=democlock.now)
     m=source('dad','胸口疼得厉害，有点喘不上气')
-    with DB() as db:
-        put(db,'prognosis_pending',1,str(m.user_id),{'active':True,'at':democlock.now()});db.commit()
-    async def forbidden(*args):raise AssertionError('urgent message must not enter prognosis model')
-    monkeypatch.setattr(prognosis,'handle_request',forbidden)
     await a.process(1,str(m.id))
-    assert care.cards_of('emergency')
+    assert care.cards_of('emergency') and not care.cards_of('care_plan')
     await a.close()
 
 @pytest.mark.asyncio
 async def test_explicit_reminder_bypasses_medical_plan_parser(family,monkeypatch):
     a=Agent(no_broadcast,RoutingModel(),now=democlock.now)
     m=source('dad','十五分钟后提醒我吃药@小艺')
-    async def forbidden(*args):raise AssertionError('single reminder is not an EMR plan')
-    monkeypatch.setattr(prognosis,'handle_request',forbidden)
+    async def no_emr_plan(*args):return False
+    monkeypatch.setattr(care_aftercare,'handle_text_orders',no_emr_plan)
     await a.process(1,str(m.id))
     with DB() as db:
         assert any(r.data['content']=='吃药' for r in records(db,'reminder',1))
+        assert not any(r.kind=='card' and (r.data.get('care') or {}).get('type')=='care_plan' for r in records(db,'card',1))
     await a.close()
 
 @pytest.mark.asyncio

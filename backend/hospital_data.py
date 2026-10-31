@@ -1,10 +1,12 @@
-"""模拟医院的后端数据源：号源、预约、支付与电子病历。
+"""模拟医院的后端数据源：两家医院的号源、预约与电子病历。
 
 医院网页（hospital/）与小艺后端共用这一份数据：
+- 医院名称、地址、坐标来自高德地图公开数据（江苏省人民医院、南京鼓楼医院）；
+  科室排班、医生、号源、病历全部虚构，仅用于产品演示，不连接任何真实医院系统；
 - 号源按“医生 + 院区 + 日期”确定性生成（同一天刷新不会变），预约后真实扣减；
-- 预约、支付、病历持久化在 records（kind=hospital_appt, group_id=0）；
-- 关键剧情号源被固定（见 PINS），保证演示可复现。
-全部数据为虚构，仅用于产品演示。
+- 预约与病历持久化在 records（kind=hospital_appt, group_id=0）；
+- 关键剧情号源被固定（见 _pin），保证演示可复现。
+提交预约前统一由家人在小艺里做一次确认；锁号后仍由本人到所属医院模拟收银台支付。
 """
 import hashlib
 import hmac
@@ -25,10 +27,13 @@ from .db import DB, Record, get, put
 CATALOG_PATH = Path(__file__).resolve().parent.parent / 'hospital' / 'src' / 'catalog.json'
 KIND = 'hospital_appt'
 GID = 0
+HOLD_KIND = 'hospital_hold'  # 演示支线“号被抢”：其他患者占用的号
 LOCK_MINUTES = 15
 MORNING = {'主任医师': ['08:30', '10:00'], 'default': ['08:00', '08:30', '09:30']}
 AFTERNOON = ['14:00', '15:30']
-FAMILIAR_DOCTOR = 'doc-g1'  # 张明远：王秀兰的熟悉医生
+FAMILIAR_DOCTOR = 'doc-g1'  # 张明远（江苏省人民医院骨科）：王秀兰的熟悉医生
+MAIN_CAMPUS = 'c-jsph'
+NEAR_CAMPUS = 'c-glyy'
 
 
 @lru_cache(maxsize=1)
@@ -36,8 +41,44 @@ def catalog():
     return json.loads(CATALOG_PATH.read_text(encoding='utf-8'))
 
 
+def hospitals():
+    return catalog()['hospitals']
+
+
+def hospital(hid):
+    return next((h for h in hospitals() if h['id'] == hid), None)
+
+
 def campus(cid):
     return next((c for c in catalog()['campuses'] if c['id'] == cid), None)
+
+
+def hospital_of(cid):
+    camp = campus(cid)
+    return hospital(camp['hospitalId']) if camp else None
+
+
+def place(cid):
+    """院区的展示名：每家医院只有一个院区时只显示医院名。"""
+    camp, hosp = campus(cid), hospital_of(cid)
+    if not camp or not hosp:
+        return ''
+    many = sum(1 for c in catalog()['campuses'] if c['hospitalId'] == hosp['id']) > 1
+    return f"{hosp['name']}{camp['name']}" if many else hosp['name']
+
+
+def find_hospital(text):
+    """按医院名称/别名（来自高德）在一句话里认出医院，返回医院对象；最长别名优先。"""
+    best, size = None, 0
+    for h in hospitals():
+        for alias in [h['name'], h['short'], h['fullName'], *h.get('aliases', [])]:
+            if alias and alias in (text or '') and len(alias) > size:
+                best, size = h, len(alias)
+    return best
+
+
+def campuses_of(hid):
+    return [c for c in catalog()['campuses'] if c['hospitalId'] == hid]
 
 
 def department(did):
@@ -61,6 +102,10 @@ def doctor_by_name(name):
     return next((d for d in catalog()['doctors'] if d['name'] == name), None)
 
 
+def doctor_campuses(doc):
+    return [doc['campusId']] if doc.get('campusId') else department(doc['deptId'])['campusIds']
+
+
 def patient(pid):
     return next((p for p in catalog()['patients'] if p['id'] == pid), None)
 
@@ -70,11 +115,12 @@ def patient_for_member(username):
 
 
 def price(title, campus_id, session):
+    main = campus_id == MAIN_CAMPUS
     if title == '主任医师':
-        return 90 if campus_id == 'c-main' else 80
+        return 90 if main else 80
     if title == '副主任医师':
-        return 65 if campus_id == 'c-main' else 55
-    return 40 if session == 'morning' else 35
+        return 65 if main else 55
+    return (40 if session == 'morning' else 35) if main else 35
 
 
 def _end(start):
@@ -95,21 +141,28 @@ def _rng(*parts):
 
 
 def _pin(doc_id, campus_id, date, start, remaining, status):
-    """剧情固定号源：明天上午熟悉医生在总院还剩少量号，东院区骨科上午约满。"""
+    """剧情固定号源：明天上午熟悉医生在省人医还剩少量号；离家更近的鼓楼医院骨科明天上午约满。"""
     tomorrow = democlock.shift_date(democlock.today(), 1)
     doc = doctor(doc_id)
-    if doc_id == FAMILIAR_DOCTOR and campus_id == 'c-main':
-        # 熟悉医生在总院从不停诊，08:30 始终留有号源（复诊也能约到上次的医生）。
+    if doc_id == FAMILIAR_DOCTOR and campus_id == MAIN_CAMPUS:
+        # 熟悉医生从不停诊，08:30 始终留有号源（复诊也能约到上次的医生）。
         if start == '08:30':
             return max(1, min(remaining, 3)) if date != tomorrow else 2, 'available'
         if date == tomorrow and start == '08:00':
             return 0, 'full'
         return remaining, ('available' if remaining > 0 else 'full')
-    if doc and doc['deptId'] == 'd-guke' and campus_id == 'c-east' and date == tomorrow and start < '12:00':
+    if doc and doc['deptId'] == 'd-guke' and campus_id == NEAR_CAMPUS and date == tomorrow and start < '12:00':
         return 0, 'full'
-    if doc_id == 'doc-g2' and campus_id == 'c-main' and date == tomorrow and start == '09:30':
-        return 5, 'available'  # 费用更低（¥40，无需授权）的备选
+    if doc and doc['deptId'] == 'd-guke' and campus_id == NEAR_CAMPUS and date == tomorrow and start >= '12:00':
+        return max(remaining, 3), 'available'  # 支线“换成下午”：鼓楼医院下午有号
+    if doc_id == 'doc-g2' and campus_id == MAIN_CAMPUS and date == tomorrow and start == '09:30':
+        return 5, 'available'  # 费用更低的备选
+    if doc_id == 'doc-g2' and campus_id == MAIN_CAMPUS and date == tomorrow and start >= '12:00':
+        return max(remaining, 4), 'available'
     return remaining, status
+
+
+STORY_DOCTORS = ('doc-g1', 'doc-g2', 'doc-g3', 'doc-g4', 'doc-g5', 'doc-x1', 'doc-x2', 'doc-x3', 'doc-x4')
 
 
 def generate_slots(dates=None):
@@ -121,14 +174,14 @@ def generate_slots(dates=None):
         dept = department(doc['deptId'])
         if not dept:
             continue
-        for cid in dept['campusIds']:
+        for cid in doctor_campuses(doc):
             for date in dates:
                 weekday = democlock.local(democlock.at(date)).weekday()
-                # 周末约四成医生出诊；剧情医生（张明远/李建华/陈志强）周末也出诊
-                if weekday >= 5 and doc['id'] not in ('doc-g1', 'doc-g2', 'doc-x1') and _rng('weekend', doc['id'], date).random() < 0.6:
+                # 周末约四成医生出诊；剧情医生（张明远/李建华/陈志强/周建国）周末也出诊
+                if weekday >= 5 and doc['id'] not in STORY_DOCTORS and _rng('weekend', doc['id'], date).random() < 0.6:
                     continue
                 rng = _rng(doc['id'], cid, date)
-                suspended = rng.random() < 0.06 and doc['id'] not in (FAMILIAR_DOCTOR, 'doc-g2')
+                suspended = rng.random() < 0.06 and doc['id'] not in STORY_DOCTORS
                 capacity = 15 if doc['title'] == '主任医师' else 25
                 times = [(t, 'morning') for t in MORNING.get(doc['title'], MORNING['default'])] + [(t, 'afternoon') for t in AFTERNOON]
                 for start, session in times:
@@ -142,7 +195,8 @@ def generate_slots(dates=None):
                     if status == 'available' and democlock.at(date, start) <= now:
                         status, remaining = 'full', 0
                     slots.append({
-                        'hospitalId': campus(cid).get('hospitalId', 'legacy-hospital'), 'id': sid, 'doctorId': doc['id'], 'departmentId': dept['id'], 'campusId': cid,
+                        'id': sid, 'doctorId': doc['id'], 'departmentId': dept['id'], 'campusId': cid,
+                        'hospitalId': campus(cid)['hospitalId'],
                         'date': date, 'startTime': start, 'endTime': _end(start), 'session': session,
                         'category': 'expert' if doc['title'] == '主任医师' else 'general',
                         'price': price(doc['title'], cid, session), 'capacity': capacity,
@@ -152,7 +206,7 @@ def generate_slots(dates=None):
 
 
 def slot(slot_id):
-    # 号源编号形如 S-doc-g1-c-main-20261104-0830，末尾是日期与时刻。
+    # 号源编号形如 S-doc-g1-c-jsph-20261104-0830，末尾是日期与时刻。
     m = re.search(r'-(\d{8})-(\d{4})$', slot_id or '')
     if not m:
         return None
@@ -160,11 +214,28 @@ def slot(slot_id):
     return next((s for s in generate_slots([f'{d[:4]}-{d[4:6]}-{d[6:]}']) if s['id'] == slot_id), None)
 
 
-def find_slots(dept_id, date, session=None, campus_id=None, doctor_id=None):
+def find_slots(dept_id, date, session=None, campus_id=None, doctor_id=None, hospital_id=None):
     return [s for s in generate_slots([date])
             if s['departmentId'] == dept_id and (session is None or s['session'] == session)
             and (campus_id is None or s['campusId'] == campus_id)
+            and (hospital_id is None or s['hospitalId'] == hospital_id)
             and (doctor_id is None or s['doctorId'] == doctor_id)]
+
+
+def query_slots(dept_id, date, session=None, hospital_id=None, doctor_id=None):
+    """查号接口（给 Skill / 工具用）：按医院汇总某科室某天的可约号源，不暴露全部排班。"""
+    rows = find_slots(dept_id, date, session, doctor_id=doctor_id, hospital_id=hospital_id)
+    out = []
+    for h in hospitals():
+        if hospital_id and h['id'] != hospital_id:
+            continue
+        mine = [s for s in rows if s['hospitalId'] == h['id']]
+        avail = [s for s in mine if s['status'] == 'available']
+        out.append({'hospital_id': h['id'], 'hospital': h['name'], 'total': len(mine), 'available': len(avail),
+                    'slots': [{'slot_id': s['id'], 'doctor_id': s['doctorId'], 'doctor': doctor(s['doctorId'])['name'],
+                               'title': doctor(s['doctorId'])['title'], 'time': s['startTime'], 'session': s['session'],
+                               'fee': s['price'], 'remaining': s['remaining']} for s in avail][:12]})
+    return out
 
 
 def appointments(db=None):
@@ -182,7 +253,23 @@ def booked_counts():
     for a in appointments():
         if a.get('status') != 'cancelled' and a.get('slotId'):
             counts[a['slotId']] = counts.get(a['slotId'], 0) + 1
+    with DB() as db:
+        for r in db.query(Record).filter_by(kind=HOLD_KIND, group_id=GID).all():
+            counts[r.key] = counts.get(r.key, 0) + int(r.data.get('count', 0))
     return counts
+
+
+def occupy_slot(db, slot_id):
+    """演示支线：模拟其他患者把这个号约光（号源剩余变为 0）。"""
+    s = slot(slot_id)
+    if not s:
+        raise ValueError('号源不存在')
+    if s['date'] not in window():
+        raise ValueError('仅支持未来七天内的模拟号源')
+    old = get(db, HOLD_KIND, GID, slot_id)
+    count = (old.data.get('count', 0) if old else 0) + max(0, s['remaining'])
+    put(db, HOLD_KIND, GID, slot_id, {'count': count, 'at': democlock.now()})
+    return count
 
 
 def pay_token(appt_id):
@@ -201,7 +288,7 @@ def public(appt):
 
 
 def create_appointment(db, slot_id, patient_id, task_id='', token='', created=None):
-    """创建预约：校验号源、幂等，成功后号源自然扣减。"""
+    """创建预约（锁号）：校验号源、就诊人与幂等，成功后号源自然扣减。token 参数仅为兼容旧调用，不再校验。"""
     if task_id:
         for a in appointments(db):
             if a.get('taskId') == task_id and a.get('status') != 'cancelled':
@@ -209,8 +296,6 @@ def create_appointment(db, slot_id, patient_id, task_id='', token='', created=No
     s = slot(slot_id)
     if not s:
         raise ValueError('号源不存在')
-    if s['date'] not in window():
-        raise ValueError('仅支持未来七天内的模拟号源')
     if s['status'] == 'suspended':
         raise ValueError('该号源已停诊')
     if s['remaining'] <= 0 or s['status'] != 'available':
@@ -224,8 +309,10 @@ def create_appointment(db, slot_id, patient_id, task_id='', token='', created=No
     doc, dept, camp = doctor(s['doctorId']), department(s['departmentId']), campus(s['campusId'])
     now = democlock.now() if created is None else created
     appt_id = 'AP-' + hashlib.sha256(f'{slot_id}:{patient_id}:{task_id}:{time.time()}'.encode()).hexdigest()[:8].upper()
+    hosp = hospital(camp['hospitalId'])
     appt = {
-        'hospitalId': camp.get('hospitalId', 'legacy-hospital'), 'hospitalName': camp['name'], 'id': appt_id, 'slotId': slot_id, 'campusId': camp['id'], 'campusName': camp['name'],
+        'id': appt_id, 'slotId': slot_id, 'campusId': camp['id'], 'campusName': camp['name'],
+        'hospitalId': hosp['id'], 'hospitalName': hosp['name'],
         'deptId': dept['id'], 'deptName': dept['name'], 'doctorId': doc['id'], 'doctorName': doc['name'],
         'doctorTitle': doc['title'], 'date': s['date'], 'session': s['session'], 'startTime': s['startTime'],
         'endTime': s['endTime'], 'category': s['category'], 'fee': s['price'], 'patientName': p['name'],
@@ -289,7 +376,7 @@ EMR_TEMPLATES = {
 def make_emr(appt):
     tpl = EMR_TEMPLATES.get(appt['deptId']) or EMR_TEMPLATES['d-guke']
     return {
-        'hospital': '市第一人民医院', 'campus': appt['campusName'], 'department': appt['deptName'],
+        'hospital': appt.get('hospitalName') or (hospital_of(appt['campusId']) or {}).get('name', ''), 'campus': appt['campusName'], 'department': appt['deptName'],
         'doctor': appt['doctorName'], 'doctor_title': appt['doctorTitle'], 'patient': appt['patientName'],
         'visit_date': appt['date'], **json.loads(json.dumps(tpl, ensure_ascii=False)),
         'note': '本病历为演示用虚构数据，不构成医疗建议。',
@@ -315,7 +402,8 @@ router = APIRouter(prefix='/api/hospital', tags=['模拟医院'])
 def check_hospital(hospital_id, appt=None):
     if not hospital_id:
         return
-    if not any(h['id'] == hospital_id for h in catalog()['hospitals']):
+    selected = hospital(hospital_id)
+    if not selected:
         raise HTTPException(404, '医院应用不存在')
     if appt is not None and appt.get('hospitalId') != hospital_id:
         raise HTTPException(404, '此医院中没有该预约')
@@ -325,11 +413,26 @@ def check_hospital(hospital_id, appt=None):
 def state(hospital_id: str | None = None):
     check_hospital(hospital_id)
     with DB() as db:
-        rows = [public(a) for a in appointments(db) if not hospital_id or a.get('hospitalId') == hospital_id]
-    return {'today': democlock.today(), 'now': democlock.now(), 'hospital': ({**catalog()['hospital'], **next(h for h in catalog()['hospitals'] if h['id'] == hospital_id)} if hospital_id else catalog()['hospital']),
-            'campuses': [c for c in catalog()['campuses'] if not hospital_id or c.get('hospitalId') == hospital_id],
-            'hospitals': [h for h in catalog().get('hospitals', []) if not hospital_id or h['id'] == hospital_id],
-            'slots': [s for s in generate_slots() if not hospital_id or s.get('hospitalId') == hospital_id], 'appointments': rows}
+        rows = [public(a) for a in appointments(db) if not hospital_id or a.get('hospitalId', hospital_id) == hospital_id]
+    slots = [s for s in generate_slots() if not hospital_id or s['hospitalId'] == hospital_id]
+    visible_hospitals = [h for h in hospitals() if not hospital_id or h['id'] == hospital_id]
+    selected = visible_hospitals[0] if visible_hospitals else None
+    campuses = [c for c in catalog()['campuses'] if not hospital_id or c['hospitalId'] == hospital_id]
+    return {'today': democlock.today(), 'now': democlock.now(), 'hospital': selected,
+            'campuses': campuses, 'hospitals': visible_hospitals, 'site': catalog()['site'],
+            'slots': slots, 'appointments': rows}
+
+
+@router.get('/slots')
+def slots_api(dept: str, date: str, session: str | None = None, hospital_id: str | None = None):
+    """查号接口：按“医院 + 科室 + 日期 + 时段”查询可约号源（Skill 与网页共用）。"""
+    check_hospital(hospital_id)
+    d = department(dept) or department_by_name(dept)
+    if not d:
+        raise HTTPException(404, '科室不存在')
+    if session not in (None, 'morning', 'afternoon'):
+        raise HTTPException(422, '时段只能是 morning 或 afternoon')
+    return {'department': d['name'], 'date': date, 'session': session, 'hospitals': query_slots(d['id'], date, session, hospital_id)}
 
 
 @router.post('/appointments')
@@ -380,7 +483,7 @@ def cancel(appt_id: str, hospital_id: str | None = None):
 
 @router.post('/appointments/{appt_id}/pay')
 async def pay(appt_id: str, body: PayBody, hospital_id: str | None = None):
-    """模拟收银台：支付只能由用户在收银台页面点击完成，小艺无法代付。"""
+    """模拟收银台：支付只能由用户本人点击，小艺无法代付。"""
     check_hospital(hospital_id)
     if not hmac.compare_digest(body.token, pay_token(appt_id)):
         raise HTTPException(403, '支付凭证无效')
@@ -414,7 +517,7 @@ def emr(appt_id: str, hospital_id: str | None = None):
     return appt['emr']
 
 
-# Each application has a scoped API; the legacy API stays available for old links.
+# 当前医院应用统一使用按院 API；全局旧 API 继续服务历史链接。
 app_router = APIRouter(prefix='/api/hospital/apps/{hospital_id}', tags=['独立模拟医院'])
 for route in router.routes:
     app_router.add_api_route(route.path.removeprefix('/api/hospital'), route.endpoint, methods=list(route.methods))
