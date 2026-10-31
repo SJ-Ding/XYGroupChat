@@ -52,6 +52,8 @@ class CardSpec(Strict):
     amount: str | None = Field(default=None, max_length=100)
     fields: list[CardField] = Field(default_factory=list, max_length=20)
     links: list[dict[str, str]] = Field(default_factory=list, max_length=5)
+    # 可信后端（就医守护编排）生成的富卡片：{type, data, actions}；模型工具 send_card 不开放此字段。
+    care: dict | None = None
     @model_validator(mode='after')
     def check(self):
         if len({f.key for f in self.fields}) != len(self.fields):
@@ -128,7 +130,8 @@ async def publish_run(gid, key):
         db.execute(text('BEGIN IMMEDIATE'))
         card = sync_run(db, gid, key)
         run = get(db, 'run', gid, key).data
-        if run['status'] == 'succeeded' and not run.get('conversation') and run.get('kind') != 'skill':
+        # 就医守护任务由 care 模块发支付卡/凭证卡，不再重复发通用“任务已完成”卡
+        if run['status'] == 'succeeded' and not run.get('conversation') and run.get('kind') != 'skill' and not run.get('care'):
             items = []
             for step in run.get('steps', []):
                 result = step.get('result') or {}

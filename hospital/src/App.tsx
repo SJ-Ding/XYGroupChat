@@ -1,6 +1,6 @@
 import { Link, NavLink, Route, Routes, useNavigate } from 'react-router-dom';
 import { Home, Stethoscope, CalendarCheck, FileText, Clock, Bell } from 'lucide-react';
-import { Breadcrumb } from './components';
+import { Breadcrumb, AgentBanner } from './components';
 import { HomePage } from './pages/HomePage';
 import { DeptPage } from './pages/DeptPage';
 import { SchedulePage } from './pages/SchedulePage';
@@ -8,6 +8,7 @@ import { PatientPage } from './pages/PatientPage';
 import { ConfirmPage } from './pages/ConfirmPage';
 import { ResultPage } from './pages/ResultPage';
 import { RecordsPage } from './pages/RecordsPage';
+import { PayPage } from './pages/PayPage';
 
 const nav = [
   { to: '/', label: '首页', icon: Home, end: true },
@@ -53,6 +54,8 @@ export default function App() {
         </div>
       </header>
 
+      <AgentBanner />
+
       {/* 模拟平台提示条 */}
       <div className="text-center py-1.5 text-xs" style={{ background: '#FFF7E6', color: '#D69B32', borderBottom: '1px solid #F5E6C8' }}>
         模拟演示平台 · 所有医院、医生、患者及号源均为虚构数据，仅用于产品演示
@@ -72,6 +75,7 @@ export default function App() {
           <Route path="/confirm" element={<LegacyConfirmRedirect />} />
           <Route path="/result" element={<LegacyResultRedirect />} />
           <Route path="/records" element={<RecordsPage />} />
+          <Route path="/pay/:id" element={<PayPage />} />
           <Route path="/guide" element={<GuidePage />} />
         </Routes>
       </main>

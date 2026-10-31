@@ -1,10 +1,9 @@
 import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { CheckCircle2, ShieldAlert, Loader2, ChevronLeft, Info } from 'lucide-react';
-import { DEPARTMENTS, DOCTORS, CAMPUSES, PATIENTS, getDraft, saveDraft, addAppointment, getSlotById } from '../data';
+import { DEPARTMENTS, DOCTORS, CAMPUSES, PATIENTS, APPROVAL_THRESHOLD, getDraft, saveDraft, submitAppointment, getSlotById } from '../data';
 import { Breadcrumb, StepBar } from '../components';
 
-const APPROVAL_THRESHOLD = 50;
 const CATEGORY_LABEL: Record<string, string> = { general: '普通门诊', expert: '专家门诊', special: '特需门诊' };
 
 export function ConfirmPage() {
@@ -47,25 +46,10 @@ export function ConfirmPage() {
     setError('');
     if (!accepted) { setError('请先阅读并同意预约须知'); return; }
     setSubmitting(true);
-    await new Promise((r) => setTimeout(r, 600));
+    await new Promise((r) => setTimeout(r, 400));
 
-    const res = addAppointment({
-      slotId: slot!.id,
-      doctorName: doctor!.name,
-      doctorTitle: doctor!.title,
-      deptName: dept!.name,
-      campusName: campus!.name,
-      date: slot!.date,
-      session: slot!.session,
-      startTime: slot!.startTime,
-      endTime: slot!.endTime,
-      category: slot!.category,
-      fee: slot!.price,
-      patientName: patient!.name,
-      patientId: patient!.id,
-      taskId,
-      token,
-    });
+    // 后端统一校验号源、授权额度与幂等，返回带支付凭证的预约
+    const res = await submitAppointment({ slotId: slot!.id, patientId: patient!.id, taskId, token });
     setSubmitting(false);
     if (res.ok && res.appointment) {
       navigate(`/appointment/result/${res.appointment.id}`);
@@ -125,7 +109,7 @@ export function ConfirmPage() {
               <span className="font-semibold" style={{ color: '#176A9B' }}>¥{slot.price}</span>
             </div>
             <div className="mt-3 text-xs" style={{ color: '#64748B' }}>
-              支付方式：预约成功，到院支付
+              支付方式：锁号成功后 15 分钟内在线支付，超时自动释放号源
             </div>
           </div>
 
@@ -146,6 +130,7 @@ export function ConfirmPage() {
               checked={accepted}
               onChange={(e) => { setAccepted(e.target.checked); saveDraft({ ...getDraft(), acceptedNotice: e.target.checked }); }}
               className="mt-0.5"
+              data-testid="agree"
               aria-label="同意预约须知"
             />
             <span>我已阅读并同意上述预约须知</span>
@@ -158,6 +143,7 @@ export function ConfirmPage() {
           <ChevronLeft className="w-4 h-4" /> 上一步
         </button>
         <button
+          data-testid="submit-appointment"
           onClick={handleSubmit}
           disabled={submitting || !accepted}
           className="h-btn-primary px-8 py-2.5"

@@ -62,7 +62,7 @@ export function SchedulePage() {
   }
 
   const selectedDoctorObj = selectedDoctor ? DOCTORS.find((d) => d.id === selectedDoctor) : null;
-  const doctorSlots = selectedDoctor ? SLOTS.filter((s) => s.doctorId === selectedDoctor && s.date === selectedDate) : [];
+  const doctorSlots = selectedDoctor ? SLOTS.filter((s) => s.doctorId === selectedDoctor && s.date === selectedDate && s.campusId === campus.id) : [];
 
   return (
     <div className="mx-auto px-6 py-6" style={{ maxWidth: 1280 }}>
@@ -90,7 +90,7 @@ export function SchedulePage() {
         </div>
         <div className="grid grid-cols-4 md:grid-cols-7 gap-2">
           {days.map((date) => {
-            const d = new Date(date);
+            const d = new Date(date + 'T00:00:00');
             const weekday = WEEKDAYS[d.getDay()];
             const monthDay = `${d.getMonth() + 1}/${d.getDate()}`;
             const count = SLOTS.filter((s) => s.departmentId === dept.id && s.date === date && s.campusId === campus.id && s.status === 'available').length;
@@ -98,6 +98,7 @@ export function SchedulePage() {
             return (
               <button
                 key={date}
+                data-testid={`date-${date}`}
                 onClick={() => pickDate(date)}
                 className={`h-card p-3 text-center transition ${selectedDate === date ? 'border-2' : ''}`}
                 style={selectedDate === date ? { borderColor: '#176A9B', background: '#EFF7FC' } : {}}
@@ -127,11 +128,12 @@ export function SchedulePage() {
         ) : (
           <div className="space-y-3">
             {doctorsWithSlots.map((doc) => {
-              const docAvailableSlots = SLOTS.filter((s) => s.doctorId === doc.id && s.date === selectedDate && s.status === 'available');
+              const docAvailableSlots = SLOTS.filter((s) => s.doctorId === doc.id && s.date === selectedDate && s.campusId === campus.id && s.status === 'available');
               const isExpanded = selectedDoctor === doc.id;
               return (
                 <div key={doc.id} className={`h-card transition ${isExpanded ? 'shadow-md' : ''}`}>
                   <button
+                    data-testid={`doctor-${doc.id}`}
                     onClick={() => pickDoctor(doc.id)}
                     className="flex w-full items-center gap-4 p-4 text-left"
                   >
@@ -172,6 +174,7 @@ export function SchedulePage() {
                           {doctorSlots.map((slot) => (
                             <button
                               key={slot.id}
+                              data-testid={`slot-${slot.id}`}
                               onClick={() => pickSlot(slot)}
                               disabled={slot.status !== 'available'}
                               className="flex items-center justify-between rounded-lg border p-3 text-left transition disabled:cursor-not-allowed disabled:opacity-50"

@@ -65,6 +65,7 @@ export function DeptPage() {
           {CAMPUSES.map((c) => (
             <button
               key={c.id}
+              data-testid={`campus-${c.id}`}
               onClick={() => pickCampus(c.id)}
               className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${selectedCampus === c.id ? 'text-white' : 'bg-white'}`}
               style={selectedCampus === c.id ? { background: '#176A9B' } : { border: '1px solid #E2E8F0', color: '#243746' }}
@@ -146,6 +147,7 @@ export function DeptPage() {
               {filteredDepts.map((d) => (
                 <button
                   key={d.id}
+                  data-testid={`dept-${d.id}`}
                   onClick={() => pickDept(d)}
                   className="h-card flex w-full items-center gap-4 p-4 text-left transition hover:shadow-md hover:border-blue-300"
                 >

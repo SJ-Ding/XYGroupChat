@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 from sqlalchemy import create_engine, Column, Integer, String, Text, Float, UniqueConstraint, event, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 from .persona import DEFAULT_AGENT_NAME, DEFAULT_PROMPT
+from . import democlock
 
 load_dotenv()
 DATA = Path(os.getenv('DATA_DIR', 'data')).resolve()
@@ -52,7 +53,8 @@ class Message(Base):
     client_id = Column(String, nullable=False)
     content = Column(Text, nullable=False)
     attachments = Column(Text, default='[]')
-    created = Column(Float, default=time.time)
+    # 演示时钟默认与真实时间一致；快进后新消息的时间与提醒调度保持同一时间线
+    created = Column(Float, default=democlock.now)
     __table_args__ = (UniqueConstraint('group_id', 'user_id', 'client_id'),)
 
 class Record(Base):

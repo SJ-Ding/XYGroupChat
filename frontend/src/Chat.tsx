@@ -23,7 +23,15 @@ import {
   ArrowRight,
   Bot,
   Stethoscope,
+  Volume2,
+  PanelRightOpen,
+  Accessibility,
+  Clock,
+  Mic,
 } from "lucide-react";
+import SidePanel, { ClockPill } from "./care/SidePanel";
+import { speak } from "./care/careApi";
+import "./care/care.css";
 import { ConversationCard, TaskBar } from "./ConversationCard";
 import type { ChatCard, AgentTask } from "./types";
 import AgentPage from "./AgentPage";
@@ -49,6 +57,27 @@ export default function Chat({
   notify: (s: string) => void;
 }) {
   const observer = user.username === "agent";
+  // 长辈大字模式：?elder=1 或手动切换（记在本机）
+  const [elder, setElder] = useState(() => {
+    const q = new URLSearchParams(location.search).get("elder");
+    if (q !== null) return q === "1";
+    try { return localStorage.getItem("elder-mode") === "1"; } catch { return false; }
+  });
+  const [careOpen, setCareOpen] = useState(() => {
+    try { return localStorage.getItem("care-open") !== "0"; } catch { return true; }
+  });
+  function toggleElder() {
+    setElder((v) => {
+      try { localStorage.setItem("elder-mode", v ? "0" : "1"); } catch { /* 忽略 */ }
+      return !v;
+    });
+  }
+  function toggleCare() {
+    setCareOpen((v) => {
+      try { localStorage.setItem("care-open", v ? "0" : "1"); } catch { /* 忽略 */ }
+      return !v;
+    });
+  }
   const [debugSelection, setDebugSelection] = useState<{source:number; keys?:string[]} | null>(null);
   const [cards, setCards] = useState<ChatCard[]>([]);
   const [agentTasks, setAgentTasks] = useState<AgentTask[]>([]);
@@ -209,6 +238,12 @@ export default function Chat({
       };
       ws.onmessage = (e) => {
         const event = JSON.parse(e.data);
+        // 转发给家人帮面板（看板/轨迹/导演台）
+        dispatchEvent(new CustomEvent("xy-event", { detail: event }));
+        if (event.type === "reset") {
+          location.reload();
+          return;
+        }
         if (event.type === "card_update" || event.type === "task_update" || event.type === "refresh") {
           syncCards().then(() => sync()).catch((e) => notify(e.message));
         }
@@ -275,6 +310,38 @@ export default function Chat({
       notify((e as Error).message);
     } finally {
       setBusy(false);
+    }
+  }
+  // 长辈模式语音输入：浏览器自带语音识别（Chrome/Edge），识别结果放进输入框，由长辈点发送
+  const [listening, setListening] = useState(false);
+  function listen() {
+    const w = window as unknown as Record<string, any>;
+    const SR = w.SpeechRecognition || w.webkitSpeechRecognition;
+    if (!SR) {
+      notify("当前浏览器不支持语音输入，请用 Chrome 或 Edge 打开");
+      return;
+    }
+    const r = new SR();
+    r.lang = "zh-CN";
+    r.interimResults = false;
+    r.maxAlternatives = 1;
+    r.onresult = (e: any) => {
+      setDraft(e.results[0][0].transcript);
+      input.current?.focus();
+    };
+    r.onerror = () => notify("没听清，再说一次吧");
+    r.onend = () => setListening(false);
+    setListening(true);
+    r.start();
+  }
+  // 长辈模式一键发送常用语
+  async function quick(text: string) {
+    try {
+      const row = await api<Message>(base + "/messages", post({ client_id: clientId(), content: text, attachments: [] }));
+      scrollToBottom.current = true;
+      merge([row]);
+    } catch (e) {
+      notify((e as Error).message);
     }
   }
   async function upload(files: FileList | null) {
@@ -346,7 +413,7 @@ export default function Chat({
   }
   const agentName = config?.agent_name || "小艺";
   return (
-    <main className={`shell ${panel ? "with-panel" : ""}`}>
+    <main className={`shell ${panel ? "with-panel" : ""} ${elder ? "elder-mode" : ""} ${careOpen && view === "chat" && !elder ? "with-care" : ""}`}>
       <nav className="rail" aria-label="主导航">
         <button
           className="profile"
@@ -503,11 +570,20 @@ export default function Chat({
                 <i className={`dot ${online ? "online" : ""}`} />
                 {online ? "已连接" : "正在重新连接…"}
                 <span className="header-members">
-                  爸爸、妈妈、小宇、{agentName}
+                  {[...members.map((m) => m.name), agentName].join("、")}
                 </span>
               </p>
             </div>
             <div className="header-actions">
+              <ClockPill />
+              {!observer && <button className={elder ? "selected" : ""} onClick={toggleElder} title="长辈大字模式：字更大、按钮更大，可以念给长辈听">
+                <Accessibility size={18} />
+                <span>{elder ? "退出大字" : "长辈大字"}</span>
+              </button>}
+              {!observer && !elder && <button className={careOpen ? "selected" : ""} onClick={toggleCare} title="家人帮面板：演示剧本 / 家庭看板 / 思考轨迹">
+                <PanelRightOpen size={18} />
+                <span>家人帮</span>
+              </button>}
               {!observer && <button
                 className={panel === "memory" ? "selected" : ""}
                 onClick={() => setPanel(panel === "memory" ? null : "memory")}
@@ -577,6 +653,9 @@ export default function Chat({
                     </span>
                   </div>
                 )}
+                {m.user_id === 0 && m.content.startsWith("—— ") ? (
+                  <div className="clock-divider" id={"message-" + m.id}><span><Clock size={13} />{m.content.replace(/——/g, "").trim()}</span></div>
+                ) : (
                 <article
                   id={"message-" + m.id}
                   className={`message ${(observer ? m.user_id === 0 : m.user_id === user.id) ? "mine" : ""} ${m.user_id === 0 ? "agent-message" : ""} ${highlight === m.id ? "highlight" : ""}`}
@@ -606,6 +685,9 @@ export default function Chat({
                         </button>
                       ))}
                     </div>
+                    {m.user_id === 0 && elder && m.content && !cards.some(c => c.message_id === m.id) && (
+                      <button className="speak-btn" onClick={() => speak(m.content)}><Volume2 size={18} />念给我听</button>
+                    )}
                     {observer && <ChatAnnotation agent={m.user_id === 0} annotation={annotations.rows[m.id]} open={(source,keys)=>setDebugSelection({source,keys})} />}
                     {m.user_id === 0 && user.authenticated && !observer && (
                       <div className="harness-actions">
@@ -636,6 +718,7 @@ export default function Chat({
                     )}
                   </div>
                 </article>
+                )}
               </React.Fragment>
             ))}
             {status === "generating" && (
@@ -649,6 +732,16 @@ export default function Chat({
             )}
             <div ref={bottom} />
           </div>
+          {elder && !observer && (
+            <div className="elder-quick">
+              <button className={`mic ${listening ? "on" : ""}`} onClick={listen} disabled={listening}>
+                <Mic size={20} />{listening ? "正在听…" : "说一句"}
+              </button>
+              {["药吃过了", "今天有点不舒服", `@${agentName} 帮我挂个号`, "我很好，放心"].map((t) => (
+                <button key={t} onClick={() => quick(t)}>{t.replace("@" + agentName + " ", "")}</button>
+              ))}
+            </div>
+          )}
           {observer ? <div className="observer-composer"><Bot size={19}/><span>Agent 聊天视角 · 只读观察 · 分类每 2 秒更新</span><a href="/?user=child">切换为小宇聊天</a></div> : <div className="composer">
             <div className="composer-tools">
               <button
@@ -738,6 +831,7 @@ export default function Chat({
           </div>}
         </section>
       )}
+      {view === "chat" && careOpen && !elder && !observer && <SidePanel onClose={toggleCare} />}
       {debugSelection && <Modal title="消息上下文与决策" close={()=>setDebugSelection(null)}><MessageDetails source={debugSelection.source} traceKeys={debugSelection.keys} onSource={(id)=>{setDebugSelection(null);source(id);}}/></Modal>}
       {panel && (
         <>

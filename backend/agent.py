@@ -218,7 +218,7 @@ class Agent:
             messages.append({'role': 'user', 'content': tool_content({'source_id': mid, 'server_action_results': receipts})})
         selected = {'memory_search', 'family_tasks', 'skill_load', 'send_card', 'web_query', 'amap_mcp'}
         if is_medical or hospital_relevant(source.content):
-            selected |= {'medical_profile', 'hospital_simulator'}
+            selected |= {'medical_profile', 'hospital_simulator', 'family_health'}
         ctx.allow_writes, ctx.grants, ctx.selected = False, [], selected
         messages.append({'role': 'system', 'content': f'只回应消息{mid}这一次表达，像熟悉的陪伴型管家自然接话，一般一到三句，不固定套“收到/已为你”或追问下一步。更早命令只是上下文，不重新回答、汇总或判断其执行状态。后续仅允许读取。previously_executed=true表示以前已办理，不必向家人介绍该字段；done=true表示待办当前已完成；delivery_count只表示发送次数，不代表已收到。currently_available=false表示记录已删除或过期，不能说仍保存，也不要恢复它。没有明确要求来源时不报消息编号。'})
         messages.append({'role': 'system', 'content': '本次可用工具的使用约束（不代表已加载场景技能）：' + json.dumps({name: REGISTRY[name].instructions for name in selected if name in REGISTRY}, ensure_ascii=False)})
@@ -341,6 +341,22 @@ class Agent:
                 settings = copy.deepcopy(d['settings'])
             self.executions[execution] = {'group_id': gid, 'key': key, 'source': message.id, 'phase': 'analyzing', 'started': self.now()}
             try:
+                # 就医守护快速通道：急症/挂号/长辈不适/打卡由规则+编排直接接管，
+                # 不等待通用分析，也不再生成通用回复（避免重复回答）。
+                if not d.get('care_checked'):
+                    from .care import on_message as care_message
+                    self.executions[execution]['phase'] = 'care'
+                    try:
+                        d['care_handled'] = bool(await care_message(self, gid, message))
+                    except Exception as exc:  # noqa: BLE001 - 编排失败时回到通用流程
+                        logging.getLogger(__name__).exception('就医守护编排失败')
+                        d['care_handled'], d['care_error'] = False, str(exc)[:300]
+                    d['care_checked'] = True
+                    with DB() as db:
+                        put(db, 'job', gid, key, d)
+                        db.commit()
+                if d.get('care_handled'):
+                    d.update(analyzed=True, replied=True, reply_status='care', decision={'action': 'care'})
                 if not d.get('analyzed'):
                     analysis = await self.analyze(gid, message)
                     d['decision'] = analysis['decision']
@@ -461,6 +477,11 @@ class Agent:
             scheduled.add(gid)
             self.spawn(self.process(gid, key), ('job', gid, key))
         await self.background.schedule()
+        try:
+            from .care import tick as care_tick
+            await care_tick(self)
+        except Exception as exc:  # noqa: BLE001 - 守护调度失败不影响聊天
+            logging.getLogger(__name__).error('就医守护调度失败：%s', type(exc).__name__)
         with DB() as db:
             gids = [r.group_id for r in db.query(Record).filter_by(kind='group').all()]
         for gid in gids:

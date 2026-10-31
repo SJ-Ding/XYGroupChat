@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Check, Loader2, CircleAlert, CirclePause, Minus } from "lucide-react";
 import { api, base, clientId, post } from "./api";
 import type { ChatCard, AgentTask } from "./types";
+import { CareCard } from "./care/CareCard";
 export const stateLabel: Record<string, string> = {
   queued: "排队中",
   running: "执行中",
@@ -37,6 +38,7 @@ export function ConversationCard({
     id: string;
   } | null>(null);
   const actions = card.actions || [];
+  const booking = card.kind === "intervention" && card.title.startsWith("门诊预约");
   async function act(action: string, link_index?: number) {
     if (busy) return;
     setBusy(true);
@@ -81,6 +83,7 @@ export function ConversationCard({
       setBusy(false);
     }
   }
+  if (card.care) return <CareCard card={card} onUpdate={onUpdate} />;
   if (card.kind === "progress" && !card.fields.length &&
       !actions.some(a => ["confirm", "submit", "retry"].includes(a))) {
     const done = card.status === "succeeded";
@@ -100,7 +103,7 @@ export function ConversationCard({
   }
   return (
     <section
-      className={`conversation-card card-${card.kind}`}
+      className={`conversation-card card-${card.kind}${booking ? " card-booking" : ""}`}
       aria-label={card.title}
     >
       <div className="card-heading">
@@ -208,7 +211,7 @@ export function ConversationCard({
                   (
                     {
                       submit: "提交信息",
-                      confirm: "确认并继续",
+                      confirm: booking ? "确认并继续（授权提交）" : "确认并继续",
                       cancel: "取消任务",
                       retry: "重试",
                     } as Record<string, string>

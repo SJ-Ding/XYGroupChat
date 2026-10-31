@@ -22,6 +22,7 @@ from .monitor import snapshot
 from .debugging import message_list, message_detail, message_annotations
 from .auth import COOKIE, session_user
 from .intent import direct_mention
+from . import democlock
 
 connections = defaultdict(dict)
 
@@ -37,15 +38,19 @@ async def broadcast(gid, event):
             except Exception:
                 pass
 
-agent = Agent(broadcast)
+agent = Agent(broadcast, now=democlock.now)
 
 @asynccontextmanager
 async def lifespan(app):
     migrate()
+    from .care_seed import autoseed
+    autoseed()
     from .hospital_simulator import set_event_loop, automation
     set_event_loop(asyncio.get_running_loop())
     agent.stopped = False
     task = asyncio.create_task(agent.loop())
+    from .care import warmup
+    asyncio.create_task(warmup())
     yield
     task.cancel()
     await agent.close()
@@ -468,6 +473,12 @@ app.include_router(harness_router(agent))
 
 from .cards import install_routes
 install_routes(app, current, access)
+
+# 家人帮：就医守护编排、演示导演台、模拟医院数据接口
+from .care import install_routes as install_care_routes
+install_care_routes(app, current, access, agent)
+from .hospital_data import router as hospital_router
+app.include_router(hospital_router)
 
 DIST = Path(__file__).resolve().parent.parent / 'frontend' / 'dist'
 if DIST.exists():

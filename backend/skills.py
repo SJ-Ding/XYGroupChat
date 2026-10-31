@@ -270,6 +270,7 @@ async def human_input(ctx, request_key, spec):
 
 async def send_card(ctx, args):
     from .cards import save_card, notify
+    args = {k: v for k, v in args.items() if k != 'care'}
     key = hashlib.sha256((ctx.run_id + json.dumps(args, sort_keys=True)).encode()).hexdigest()
     with DB() as db:
         card = save_card(db, ctx.group_id, key, args)

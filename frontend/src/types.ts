@@ -77,5 +77,7 @@ export type ChatCard = {
   steps?: {id: string; title: string; status: string}[];
   actions?: string[];
   submitted_values?: Record<string, string | number>;
+  // 就医守护富卡片（仅可信后端生成）
+  care?: { type: string; data: Record<string, any>; actions: string[] } | null;
 };
 export type AgentTask = {key: string; title: string; status: string; card_id: string; message_id: number; steps: {status: string}[]};

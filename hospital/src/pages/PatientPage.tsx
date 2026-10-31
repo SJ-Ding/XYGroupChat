@@ -32,6 +32,7 @@ export function PatientPage() {
         {PATIENTS.map((p) => (
           <button
             key={p.id}
+            data-testid={`patient-${p.id}`}
             onClick={() => pickPatient(p.id)}
             className={`h-card flex w-full items-center gap-4 p-5 text-left transition ${selectedPatient === p.id ? 'border-2' : ''}`}
             style={selectedPatient === p.id ? { borderColor: '#176A9B', background: '#EFF7FC' } : {}}
@@ -56,7 +57,7 @@ export function PatientPage() {
         <button onClick={() => navigate('/appointment/schedule')} className="h-btn-ghost px-5 py-2.5">
           <ChevronLeft className="w-4 h-4" /> 上一步
         </button>
-        <button onClick={next} disabled={!selectedPatient} className="h-btn-primary px-8 py-2.5">
+        <button data-testid="patient-next" onClick={next} disabled={!selectedPatient} className="h-btn-primary px-8 py-2.5">
           下一步
         </button>
       </div>

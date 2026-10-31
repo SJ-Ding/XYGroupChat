@@ -1,4 +1,33 @@
-import { ChevronRight } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { ChevronRight, Bot } from 'lucide-react';
+
+// 小艺代为操作时的顶部横幅：浏览器执行器通过 sessionStorage + 自定义事件更新当前步骤，
+// 让评委和家人能看清“哪一步是小艺在点”。普通访客不显示。
+export function AgentBanner() {
+  const read = () => {
+    try {
+      return { on: sessionStorage.getItem('agent_driving') === '1', step: sessionStorage.getItem('agent_step') || '' };
+    } catch {
+      return { on: false, step: '' };
+    }
+  };
+  const [state, setState] = useState(read);
+  useEffect(() => {
+    const update = () => setState(read());
+    window.addEventListener('agent-step', update);
+    const timer = setInterval(update, 800);
+    return () => { window.removeEventListener('agent-step', update); clearInterval(timer); };
+  }, []);
+  if (!state.on) return null;
+  return (
+    <div data-testid="agent-banner" className="sticky z-40 flex items-center justify-center gap-3 py-2 text-sm text-white" style={{ top: 68, background: 'linear-gradient(90deg,#FF7A45,#F5A623)' }}>
+      <span className="grid h-6 w-6 place-items-center rounded-full bg-white/25"><Bot className="h-4 w-4" /></span>
+      <span className="font-medium">小艺正在代为操作</span>
+      {state.step && <span className="rounded-full bg-white/20 px-3 py-0.5">{state.step}</span>}
+      <span className="text-white/80">· 提交前会请家人确认，支付必须本人完成</span>
+    </div>
+  );
+}
 
 export function Breadcrumb({ items }: { items: string[] }) {
   return (

@@ -45,6 +45,23 @@ _CONFIRM_DETAILS_JS = r"""
   };
 }
 """
+# 代为操作时高亮将要点击的元素，并更新医院页面顶部“小艺正在代为操作”横幅
+_HIGHLIGHT_JS = r"""
+([sel, label]) => {
+  try {
+    sessionStorage.setItem('agent_driving', '1');
+    sessionStorage.setItem('agent_step', label);
+    window.dispatchEvent(new Event('agent-step'));
+  } catch (e) {}
+  const el = sel ? document.querySelector(sel) : null;
+  if (!el) return false;
+  el.scrollIntoView({ block: 'center', behavior: 'instant' });
+  el.style.outline = '3px solid #FF7A45';
+  el.style.outlineOffset = '3px';
+  el.style.boxShadow = '0 0 0 8px rgba(255,122,69,.18)';
+  return true;
+}
+"""
 DEPARTMENTS = (
     "普通内科", "呼吸内科", "心血管内科", "消化内科", "内分泌科", "神经内科",
     "肾内科", "普通外科", "骨科", "神经外科", "泌尿外科", "胸外科",
@@ -161,12 +178,13 @@ class _Session:
         self.error = None
         self.appointment = None
         self.details = None
+        self.step = ''
         self.proceed = threading.Event()
         self.stop = threading.Event()
 
     def snapshot(self):
         return {"task_id": self.task_id, "status": self.status, "error": self.error,
-                "appointment": self.appointment, "details": self.details,
+                "appointment": self.appointment, "details": self.details, "step": self.step,
                 "url": hospital_base()}
 
 
@@ -217,10 +235,16 @@ class AppointmentManager:
         if browsers:
             os.environ["PLAYWRIGHT_BROWSERS_PATH"] = browsers
 
+    @staticmethod
+    def _pause():
+        return int(os.getenv("HOSPITAL_STEP_PAUSE", "650"))
+
     def _launch(self, pw):
         headless = os.getenv("HOSPITAL_HEADLESS", "").lower() in ("1", "true", "yes")
+        options = {"headless": headless, "slow_mo": int(os.getenv("HOSPITAL_SLOWMO", "120")),
+                   "args": ["--window-size=1300,900"]}
         try:
-            return pw.chromium.launch(headless=headless)
+            return pw.chromium.launch(**options)
         except Exception as first_error:
             for executable in (
                 r"C:\Program Files\Google\Chrome\Application\chrome.exe",
@@ -230,7 +254,7 @@ class AppointmentManager:
             ):
                 if os.path.exists(executable):
                     try:
-                        return pw.chromium.launch(headless=headless, executable_path=executable)
+                        return pw.chromium.launch(executable_path=executable, **options)
                     except Exception:
                         continue
             raise RuntimeError("未找到可用浏览器，请安装 Chrome/Edge 或运行 playwright install chromium") from first_error
@@ -264,8 +288,55 @@ class AppointmentManager:
                         pass
         if session.status == "done" and session.appointment:
             self._finalize_run(session)
+            _schedule(_care_booked(session.gid, session.run_key, session.appointment))
+
+    def _act(self, page, testid, label, session, pause=None):
+        """高亮 → 停顿 → 点击。选择器统一用 data-testid，不依赖页面视觉位置。"""
+        selector = f'[data-testid="{testid}"]'
+        page.wait_for_selector(selector, timeout=10000)
+        page.evaluate(_HIGHLIGHT_JS, [selector, label])
+        session.step = label
+        _schedule(_progress(session.gid, session.run_key, label))
+        page.wait_for_timeout(self._pause() if pause is None else pause)
+        page.locator(selector).first.click(timeout=10000)
+
+    def _announce(self, page, label, session):
+        page.evaluate(_HIGHLIGHT_JS, [None, label])
+        session.step = label
+        _schedule(_progress(session.gid, session.run_key, label))
+
+    def _fill_targeted(self, page, session):
+        """精确代办：家人在号源对比卡上选定的院区/医生/时间，逐步点到核对页。"""
+        from .hospital_data import department_by_name, campus, doctor, patient
+        c = session.context
+        dept = department_by_name(c["department"])
+        doc, camp, pat = doctor(c["doctor_id"]), campus(c["campus_id"]), patient(c["patient_id"])
+        page.goto(hospital_base() + "appointment/departments", wait_until="domcontentloaded", timeout=15000)
+        page.wait_for_selector('[data-testid^="dept-"]', timeout=15000)
+        self._announce(page, "打开市第一人民医院 · 预约挂号", session)
+        page.wait_for_timeout(self._pause())
+        self._act(page, f"campus-{camp['id']}", f"选择院区：{camp['name']}", session)
+        self._act(page, f"dept-{dept['id']}", f"选择科室：{dept['name']}", session)
+        page.wait_for_url(re.compile(r"/appointment/schedule"), timeout=15000)
+        self._act(page, f"date-{c['date']}", f"选择日期：{c['date']}", session)
+        self._act(page, f"doctor-{doc['id']}", f"选择医生：{doc['name']}（{doc['title']}）", session)
+        self._act(page, f"slot-{c['slot_id']}", f"选择号源：{c['preferred_time']} {c.get('time', '')}".strip(), session)
+        page.wait_for_url(re.compile(r"/appointment/patient"), timeout=15000)
+        self._act(page, f"patient-{pat['id']}", f"选择就诊人：{pat['name']}", session)
+        # 家人在小艺中授权的令牌（超过 50 元的挂号费需要）
+        page.evaluate(
+            "([t, k]) => { sessionStorage.setItem('hospital_task_id', t); sessionStorage.setItem('hospital_token', k); }",
+            [session.task_id, "tk-" + uuid.uuid4().hex[:16]],
+        )
+        self._act(page, "patient-next", "下一步：核对预约信息", session)
+        page.wait_for_url(re.compile(r"/appointment/confirm"), timeout=15000)
+        self._act(page, "agree", "勾选预约须知", session)
+        session.details = page.evaluate(_CONFIRM_DETAILS_JS)
+        self._announce(page, "已停在核对页 · 等待家人在小艺里确认", session)
 
     def _fill_until_confirm(self, page, session):
+        if session.context.get("slot_id"):
+            return self._fill_targeted(page, session)
         base = hospital_base()
         page.goto(base + "appointment/departments", wait_until="domcontentloaded", timeout=15000)
         page.wait_for_timeout(800)
@@ -320,9 +391,11 @@ class AppointmentManager:
 
     def _publish_confirmation(self, session):
         d = session.details or {}
+        fee = d.get("fee") or 0
         spec = {
             "title": "门诊预约 · 待确认",
-            "description": "请点击卡片“确认并继续”提交预约；也可以直接在浏览器里点“确认提交预约”。",
+            "description": (f"挂号费 ¥{fee} 超过家庭授权额度 ¥50，需要你确认授权。" if fee > 50 else "")
+            + "浏览器已停在医院核对页，点“确认并继续”后由程序提交锁号；付款在下一步由你本人完成。",
             "items": [
                 {"label": "院区", "value": d.get("campus", "")},
                 {"label": "科室", "value": d.get("department", "")},
@@ -359,10 +432,18 @@ class AppointmentManager:
                 return
             if session.proceed.wait(1.0):
                 session.status = "submitting"
-                page.get_by_role("button", name=re.compile("确认提交预约")).click(timeout=10000)
+                try:
+                    self._act(page, "submit-appointment", "家人已确认 · 提交预约", session, pause=400)
+                except Exception:
+                    page.get_by_role("button", name=re.compile("确认提交预约")).click(timeout=10000)
                 page.wait_for_url(re.compile(r"/appointment/result"), timeout=20000)
-                page.wait_for_timeout(500)
+                try:
+                    page.wait_for_selector('[data-testid="appointment-id"]', timeout=8000)
+                except Exception:
+                    pass
+                self._announce(page, "锁号成功 · 支付请在小艺的支付卡中由本人完成", session)
                 self._complete(session, page)
+                page.wait_for_timeout(int(os.getenv("HOSPITAL_RESULT_HOLD", "2500")))
                 return
         self._fail(session, "等待确认超时")
 
@@ -423,6 +504,37 @@ _main_loop = None
 _latest_tasks: dict[tuple[int, int], str] = {}
 _started_tasks: set[str] = set()
 _latest_lock = threading.Lock()
+
+
+def reset_sessions():
+    """演示重置：停止所有浏览器任务并清空任务索引。"""
+    automation.shutdown()
+    automation.sessions = {}
+    with _latest_lock:
+        _latest_tasks.clear()
+        _started_tasks.clear()
+
+
+async def _progress(gid, run_key, label):
+    """把浏览器当前步骤同步到聊天里的任务进度条。"""
+    try:
+        from .cards import update_progress
+        with DB() as db:
+            run = get(db, "run", gid, run_key)
+            if not run or run.data.get("status") in ("succeeded", "failed", "cancelled"):
+                return
+        await update_progress(gid, run_key, "小艺正在操作医院网页：" + label)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+async def _care_booked(gid, run_key, appointment):
+    try:
+        from .care import on_booked
+        await on_booked(gid, run_key, appointment)
+    except Exception:  # noqa: BLE001 - 回调失败不影响预约结果
+        import logging
+        logging.getLogger(__name__).exception('就医守护回调失败')
 
 
 def set_event_loop(loop):
@@ -502,6 +614,11 @@ async def hospital_simulator(ctx, args):
             context["patient_id"] = "p-002" if args["patient_name"] == "小林" else "p-001"
         if args.get("preferred_time"):
             context["preferred_time"] = args["preferred_time"]
+        for name in ("slot_id", "campus_id", "doctor_id", "date", "patient_id"):
+            if args.get(name):
+                context[name] = args[name]
+        if context.get("slot_id"):
+            context["time"] = context["slot_id"][-4:-2] + ":" + context["slot_id"][-2:]
         key = _run_key(ctx.group_id, ctx.user_id, instruction)
         with DB() as db:
             run = get(db, "run", ctx.group_id, key)
@@ -579,6 +696,11 @@ register(Tool(
         "layout": {"enum": ["grid", "search"]},
         "mode": {"enum": ["mock", "model"]},
         "task_id": {"type": "string", "maxLength": 128},
+        "slot_id": {"type": "string", "maxLength": 120},
+        "campus_id": {"type": "string", "maxLength": 40},
+        "doctor_id": {"type": "string", "maxLength": 40},
+        "date": {"type": "string", "maxLength": 10},
+        "patient_id": {"type": "string", "maxLength": 40},
     }, ["action"]),
     hospital_simulator,
 ))
