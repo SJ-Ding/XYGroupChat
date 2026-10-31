@@ -192,9 +192,12 @@ async def execute(name, args, ctx):
         raise
     reused = reused_result.get()
     reused_result.reset(token)
-    failed = isinstance(result, dict) and 'error' in result
+    failed = isinstance(result, dict) and bool(result.get('error'))
     if not failed and name == 'hospital_simulator' and args.get('action') == 'query':
         summary = f"号源查询完成，返回 {len(result.get('slots', []))} 个号源"
+    elif not failed and name == 'hospital_simulator' and args.get('action') in ('book', 'status'):
+        summary = ('等待选择医院' if result.get('status') == 'awaiting_hospital_selection' else
+                   '已收到模拟医院预约编号' if (result.get('appointment') or {}).get('id') else '浏览器预约任务正在执行')
     else:
         summary = ('工具未能完成，请核对任务信息' if failed else '使用已有结果' if reused
             else '技能说明已加载' if name == 'skill_load' else '查询已完成'

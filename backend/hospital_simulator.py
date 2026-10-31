@@ -192,7 +192,7 @@ class AppointmentManager:
     def start(self, task_id, gid, user_id, run_key, context) -> _Session:
         with self._lock:
             existing = self.sessions.get(task_id)
-            if existing:
+            if existing and existing.status != 'failed':
                 return existing
             session = _Session(task_id, gid, user_id, run_key, context)
             self.sessions[task_id] = session
@@ -259,29 +259,29 @@ class AppointmentManager:
         try:
             self._prepare_playwright_env()
             from playwright.sync_api import sync_playwright
+            # Starting the Playwright driver can fail before a browser exists.
+            # Keep that startup inside the same failure handling as page actions.
+            with sync_playwright() as pw:
+                browser = None
+                try:
+                    browser = self._launch(pw)
+                    page = browser.new_page(viewport={"width": 1280, "height": 800})
+                    self._fill_until_confirm(page, session)
+                    if session.stop.is_set():
+                        self._fail(session, "任务已取消")
+                        return
+                    session.status = "submitting"
+                    session.proceed.set()
+                    self._wait_for_submit(page, session)
+                finally:
+                    if browser is not None:
+                        try:
+                            browser.close()
+                        except Exception:
+                            pass
         except Exception as exc:  # noqa: BLE001
-            self._fail(session, f"无法加载浏览器组件：{exc}")
+            self._fail(session, str(exc)[:300] or type(exc).__name__)
             return
-        with sync_playwright() as pw:
-            browser = None
-            try:
-                browser = self._launch(pw)
-                page = browser.new_page(viewport={"width": 1280, "height": 800})
-                self._fill_until_confirm(page, session)
-                if session.stop.is_set():
-                    self._fail(session, "任务已取消")
-                    return
-                session.status = "submitting"
-                session.proceed.set()
-                self._wait_for_submit(page, session)
-            except Exception as exc:  # noqa: BLE001
-                self._fail(session, str(exc)[:300])
-            finally:
-                if browser is not None:
-                    try:
-                        browser.close()
-                    except Exception:
-                        pass
         if session.status == "done" and session.appointment:
             self._finalize_run(session)
             _schedule(_care_booked(session.gid, session.run_key, session.appointment))
@@ -438,6 +438,7 @@ class AppointmentManager:
         session.status = "failed"
         session.error = error
         self._finalize_run(session)
+        _schedule(_care_failed(session.gid, session.run_key, session.error))
 
     def _finalize_run(self, session):
         with DB() as db:
@@ -510,6 +511,17 @@ async def _care_booked(gid, run_key, appointment):
     except Exception:  # noqa: BLE001 - 回调失败不影响预约结果
         import logging
         logging.getLogger(__name__).exception('就医守护回调失败')
+
+
+async def _care_failed(gid, run_key, error):
+    from .care import say
+    with DB() as db:
+        run = get(db, 'run', gid, run_key)
+        if not run or not run.data.get('care') or run.data.get('status') != 'failed':
+            return
+        source = run.data.get('source_id')
+    await say('模拟挂号未完成：' + (error or '浏览器任务失败') + '。尚未确认锁号，请核对后重试。',
+              f'care:browser-failed:{run_key}', source=source)
 
 
 def set_event_loop(loop):
@@ -625,7 +637,30 @@ async def hospital_simulator(ctx, args):
             existing = get(db, 'run', ctx.group_id, key)
         if existing:
             session = _owned_session(ctx, key)
-            return {'ok': True, 'task_id': key, 'status': session.status if session else existing.data['status']}
+            if session and session.status != 'failed':
+                return {'ok': True, 'task_id': key, 'status': session.status, 'appointment': session.appointment}
+            # Reconcile a finished write before retrying an interrupted browser.
+            # The same task id is also idempotent at the hospital booking API.
+            with DB() as db:
+                booked = next((a for a in H.appointments(db) if a.get('taskId') == key and a.get('status') != 'cancelled'), None)
+                if booked:
+                    row = get(db, 'run', ctx.group_id, key)
+                    value = row.data
+                    value.update(status='succeeded', error=None, updated=time.time())
+                    if value.get('steps'):
+                        value['steps'][0].update(status='succeeded', result={'appointment': {'id': booked['id']}})
+                    row.set(value)
+                    db.commit()
+            if booked:
+                from .cards import publish_run
+                await publish_run(ctx.group_id, key)
+                return {'ok': True, 'task_id': key, 'status': 'done', 'appointment': {'id': booked['id']}}
+            if existing.data['status'] == 'cancelled':
+                return {'error': '该挂号任务已取消，请重新选择号源', 'task_id': key, 'status': 'cancelled'}
+            if existing.data['status'] == 'succeeded':
+                return {'error': '任务已结束但未找到关联预约，请先核对医院记录', 'task_id': key}
+            with _latest_lock:
+                _started_tasks.discard(key)
         context = booking_context(instruction)
         if not context.get("department") and not args.get("department"):
             return {"error": "请明确科室或症状"}
@@ -669,25 +704,27 @@ async def hospital_simulator(ctx, args):
         key = _run_key(ctx.group_id, ctx.user_id, instruction, args.get("hospital_id"))
         with DB() as db:
             run = get(db, "run", ctx.group_id, key)
-            if not run:
+            if not run or run.data.get('status') in ('running', 'failed', 'waiting_input'):
                 step = {"id": "0", "tool": "hospital_simulator",
                         "arguments": {"action": "status", "task_id": key}, "status": "running"}
-                put(db, "run", ctx.group_id, key, {
+                put(db, "run", ctx.group_id, key, {**(run.data if run else {}),
                     "title": f"门诊预约 · {context['department']} · {context['preferred_time']}",
                     "user_id": ctx.user_id, "source_id": ctx.source_id,
                     "status": "running", "steps": [step], "grants": [],
-                    "updated": time.time()})
+                    "error": None, "updated": time.time()})
                 db.commit()
         with _latest_lock:
             already_started = key in _started_tasks
             _latest_tasks[(ctx.group_id, ctx.user_id)] = key
         session = automation.get(key)
-        if session is None and not already_started:
+        if (session is None or session.status == 'failed') and not already_started:
             session = automation.start(key, ctx.group_id, ctx.user_id, key, context)
             with _latest_lock:
                 _started_tasks.add(key)
         from .cards import publish_run
         await publish_run(ctx.group_id, key)
+        if session and session.status == 'failed':
+            return {'error': session.error or '浏览器任务启动失败', 'task_id': key, 'status': 'failed'}
         return {"ok": True, "task_id": key, "status": session.status if session else "starting",
                 "message": "已启动预约，正在打开模拟医院浏览器，锁号后请本人确认支付"}
 

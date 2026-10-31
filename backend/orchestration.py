@@ -54,15 +54,27 @@ async def run_steps(gid, key):
             return
         with DB() as db:
             current = get(db, 'run', gid, key).data
-            current['steps'][index].update(status='failed' if isinstance(result, dict) and 'error' in result else 'succeeded', result=result)
+            # Browser work runs independently. A successful status poll does not
+            # mean the reservation has finished, and error=null is not a failure.
+            browser_status = step['tool'] == 'hospital_simulator' and step['arguments'].get('action') == 'status'
+            if browser_status and current['status'] in ('succeeded', 'failed', 'cancelled'):
+                return
+            error = result.get('error') if isinstance(result, dict) else None
+            if browser_status and not error and result.get('status') in ('failed', 'cancelled'):
+                error = '浏览器预约失败' if result['status'] == 'failed' else '浏览器预约已取消'
+            pending = browser_status and not error and result.get('status') not in ('done', 'confirmed')
+            if browser_status and not pending and not error and not (result.get('appointment') or {}).get('id'):
+                error = '模拟医院未返回预约编号'
+            current['steps'][index].update(status='failed' if error else 'running' if pending else 'succeeded', result=result)
             if current['status'] != 'cancelled':
-                if isinstance(result, dict) and 'error' in result:
+                if error:
                     current['status'] = 'failed'
+                    current['error'] = str(error)
                 elif index == len(current['steps']) - 1:
-                    current['status'] = 'succeeded'
+                    current['status'] = 'running' if pending else 'succeeded'
             current['updated'] = time.time()
             put(db, 'run', gid, key, current)
             db.commit()
         await publish_run(gid, key)
-        if current['status'] in ('failed', 'cancelled'):
+        if pending or current['status'] in ('failed', 'cancelled'):
             return

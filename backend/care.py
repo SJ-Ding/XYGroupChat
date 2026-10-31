@@ -3,7 +3,7 @@
 把“一句话挂号 → 锁号 → 支付 → 就诊后守护 → 用药依从 → 复诊简报”串成可演示的闭环：
 - 规则保底、大模型增强：槽位抽取、需求判断、病历结构化、简报问题优先请大模型完成，
   模型未配置、超时或输出不合规时用规则兜底，演示不中断。
-- 模型负责想、代码负责做：锁号由家人点确认卡后由浏览器执行器提交；支付只能本人在收银台完成；
+- 模型负责想、代码负责做：选定医院后由浏览器执行器自动锁号；支付只能本人在收银台完成；
   急症识别只走规则，不依赖模型。
 - 每一步写入思考轨迹（care_trace），前端“小艺在想什么”实时展示。
 """
@@ -769,20 +769,33 @@ async def start_booking(agent, user_id, option, meta, *, origin_key, trace=None)
             'hospital_id': option.get('hospital_id') or H.campus(option['campus_id']).get('hospitalId'), 'slot_id': option['slot_id'], 'campus_id': option['campus_id'], 'doctor_id': option['doctor_id'],
             'date': option['date'], 'patient_id': meta['patient_id']}
     ctx = SkillContext(GID, user_id, f'care:{origin_key}', 0, False, grants=[], selected={'hospital_simulator'}, now=democlock.now())
-    await say(f"好，我这就去模拟医院给{display(meta['patient'])}挂{option['doctor']}医生{option['date_label']}{option['time']}的号。"
-              "浏览器会自动填写并锁号，支付前请你本人确认。",
-              f'care:booking:{origin_key}:{option["slot_id"]}')
     await trace.step('tool', 'hospital_simulator · book（浏览器自动化）', f"打开模拟挂号平台：{option['campus']} → {meta['department']} → {option['doctor']} → {option['time']} → 就诊人{patient_name}")
     result = await execute('hospital_simulator', args, ctx)
-    if 'error' in result:
+    if result.get('error'):
         await say('打开医院网站出了点问题：' + result['error'], f'care:book-error:{origin_key}')
         await trace.step('error', '浏览器任务启动失败', result['error'])
+        return None
+    if not result.get('task_id') or result.get('status') in ('failed', 'cancelled', 'awaiting_hospital_selection'):
+        await say('这次尚未启动挂号，请重新选择医院和号源后再试。', f'care:not-started:{origin_key}')
         return None
     with DB() as db:
         run = get(db, 'run', GID, result['task_id'])
         if run:
-            run.set({**run.data, 'care': True, 'care_meta': {**meta, 'option': option, 'origin': origin_key}})
+            run.set({**run.data, 'source_id': trace.source or ctx.source_id, 'care': True,
+                     'care_meta': {**meta, 'option': option, 'origin': origin_key}})
             db.commit()
+    if (result.get('appointment') or {}).get('id'):
+        appt_id = result['appointment']['id']
+        await say(f'查到已有模拟预约 {appt_id}，本次没有重复挂号，请核对预约记录。',
+                  f'care:booking-existing:{origin_key}:{appt_id}', source=trace.source)
+        with DB() as db:
+            appt = H.get_appt(db, appt_id)
+        if appt and appt.get('pay_status') == 'unpaid':
+            await on_booked(GID, result['task_id'], result['appointment'])
+        return result['task_id']
+    await say(f"已启动模拟医院挂号任务：{display(meta['patient'])}，{option['doctor']}医生，{option['date_label']}{option['time']}。"
+              "浏览器正在填写预约信息，锁号后会发送支付卡，请你本人核对付款。",
+              f'care:booking:{origin_key}:{option["slot_id"]}', source=trace.source)
     await trace.step('rule', '自动锁号，支付前确认', '浏览器填写并锁号 → 发支付卡；付款由本人完成')
     return result['task_id']
 
