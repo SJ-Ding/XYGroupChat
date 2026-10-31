@@ -590,7 +590,9 @@ async def hospital_simulator(ctx, args):
                   and (not args.get('doctor_id') or s['doctorId'] == args['doctor_id'])
                   and (not args.get('time') or s['startTime'] == args['time'])
                   and (not args.get('preferred_time') or s['session'] == ('morning' if args['preferred_time'] == '上午' else 'afternoon'))]
-        return {"slots": result, "simulated": True, "hospitals": H.catalog().get('hospitals', [])}
+        return {"slots": result, "simulated": True, "hospitals": H.catalog().get('hospitals', []),
+                "query": {"department": dept['name'], "dates": dates,
+                    **{key: args[key] for key in ('date', 'time', 'preferred_time', 'hospital_id', 'campus_id', 'doctor_id') if args.get(key)}}}
     if action == "open":
         source_text = _source_text(ctx)
         if source_text and not (re.search(r"(打开|访问|进入|看看|启动)", source_text) and hospital_relevant(source_text)):

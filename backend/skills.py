@@ -193,7 +193,13 @@ async def execute(name, args, ctx):
     reused = reused_result.get()
     reused_result.reset(token)
     failed = isinstance(result, dict) and 'error' in result
-    await finish(ctx.group_id, key, 'failed' if failed else 'succeeded', '工具未能完成，请核对任务信息' if failed else '使用已有结果' if reused else '技能说明已加载' if name == 'skill_load' else '查询已完成' if name in {'memory_search', 'web_query', 'amap_mcp', 'medical_profile'} else '操作已完成')
+    if not failed and name == 'hospital_simulator' and args.get('action') == 'query':
+        summary = f"号源查询完成，返回 {len(result.get('slots', []))} 个号源"
+    else:
+        summary = ('工具未能完成，请核对任务信息' if failed else '使用已有结果' if reused
+            else '技能说明已加载' if name == 'skill_load' else '查询已完成'
+            if name in {'memory_search', 'web_query', 'amap_mcp', 'medical_profile'} else '操作已完成')
+    await finish(ctx.group_id, key, 'failed' if failed else 'succeeded', summary)
     return result
 
 

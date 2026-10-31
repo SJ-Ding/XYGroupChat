@@ -95,8 +95,8 @@ class Trace:
         await broadcast({'type': 'care_trace', 'turn': self.turn})
 
 
-async def say(text, key):
-    return await agent_ref().send(GID, text, key)
+async def say(text, key, *, source=None):
+    return await agent_ref().send(GID, text, key, source_id=source)
 
 
 async def post_card(key, ctype, title, data, actions, status='active'):
@@ -453,15 +453,37 @@ def pick_slot(avail, fam_doc):
     return sorted(avail, key=lambda s: (-TITLE_SCORE.get(H.doctor(s['doctorId'])['title'], 0.5), s['startTime']))[0]
 
 
-async def build_options(login, dept_id, date, session, trace):
+class HospitalQueryError(ValueError):
+    pass
+
+
+def appointment_context(user_id, source, trace):
+    from .skills import SkillContext
+    return SkillContext(GID, user_id, f'care:{trace.turn}', source or 0, False,
+        grants=[], selected={'skill_load', 'hospital_simulator'}, now=democlock.now())
+
+
+async def query_hospital(ctx, trace, **filters):
+    from .skills import execute
+    result = await execute('hospital_simulator', {'action': 'query', **filters}, ctx)
+    if 'error' in result:
+        await trace.step('error', 'hospital_simulator · query 查询失败', result['error'])
+        raise HospitalQueryError(result['error'])
+    await trace.step('tool', 'hospital_simulator · query 查询号源',
+        f"返回 {len(result['slots'])} 个号源（含可约、约满和停诊状态）")
+    return result['slots']
+
+
+async def build_options(login, dept_id, date, session, trace, *, ctx):
     dept = H.department(dept_id)
     pid = FAMILY[login]['patient_id']
     fam_doc = familiar_doctor(login, dept_id)
     dists = await distances(dept['campusIds'], trace)
     started = time.monotonic()
+    all_slots = await query_hospital(ctx, trace, department=dept['name'], date=date, preferred_time=session_label(session))
     available, blocked, scanned = [], [], 0
     for cid in dept['campusIds']:
-        slots = H.find_slots(dept_id, date, session, cid)
+        slots = [s for s in all_slots if s['campusId'] == cid]
         scanned += len(slots)
         avail = [s for s in slots if s['status'] == 'available']
         visits = H.history_count(pid, cid)
@@ -568,7 +590,7 @@ async def handle_need_hint(agent, message, speaker, text_):
     await say(hint, f'care:hint:{message.id}')
     await post_card(f'hint:{message.id}', 'need_hint', f'要帮{display(speaker)}看看{dept_name}的号吗？', {
         'member': speaker, 'member_name': display(speaker), 'real_name': real_name(speaker), 'symptom': word,
-        'quote': text_[:60], 'department': dept_name, 'date': tomorrow, 'date_label': democlock.date_label(tomorrow),
+        'source_id': message.id, 'quote': text_[:60], 'department': dept_name, 'date': tomorrow, 'date_label': democlock.date_label(tomorrow),
         'session': session, 'weather': wx, 'history': history[:2], 'for': CAREGIVER}, ['accept', 'dismiss'])
     await trace.step('card', '推送「小艺建议」卡给照护人', f'{display(CAREGIVER)}点「好的」即可进入一句话挂号')
     return True
@@ -587,8 +609,13 @@ async def handle_booking_request(agent, user_id, text_, *, source=None, speaker=
     speaker = speaker or login_of(user_id)
     trace = trace or Trace('一句话挂号', source)
     await trace.step('rule', '意图识别：挂号请求', f'“{text_[:40]}”' if text_ else '来自「小艺建议」卡')
-    from .skill_library import load_instructions
-    skill = load_instructions('family-appointment')
+    from .skills import execute
+    ctx = appointment_context(user_id, source, trace)
+    skill = await execute('skill_load', {'name': 'family-appointment'}, ctx)
+    if 'error' in skill:
+        await trace.step('error', '挂号技能加载失败', skill['error'])
+        await say('挂号服务暂时无法加载，请稍后重试。', f'care:skill-error:{source or trace.turn}')
+        return None
     await trace.step('skill', '加载 Skill · family-appointment', '门诊预约方法：症状→科室对照、补全四要素、自动选号、支付前确认')
     slots = {**rule_slots(text_ or '', speaker), **{k: v for k, v in (preset or {}).items() if v}}
     await trace.step('rule', '规则抽取槽位', '，'.join(f'{k}={v}' for k, v in slots.items() if v) or '未抽到明确槽位')
@@ -632,12 +659,26 @@ async def handle_booking_request(agent, user_id, text_, *, source=None, speaker=
         if not dept:
             await say('想查哪个科室的号源？', f'care:query-dept:{source}')
             return None
-        dates = [slots['date']] if slots.get('date') else H.window()
-        available = [s for s in H.generate_slots(dates) if s['departmentId'] == dept['id'] and s['status'] == 'available'
-            and (not slots.get('session') or s['session'] == slots['session'])
-            and (not slots.get('time') or s['startTime'] == slots['time'])]
+        filters = {'department': dept['name']}
+        for key in ('date', 'time', 'hospital_id', 'campus_id', 'doctor_id'):
+            if slots.get(key):
+                filters[key] = slots[key]
+        if not filters.get('hospital_id'):
+            selected = next((h['id'] for h in H.catalog()['hospitals'] if h['name'] in (text_ or '')), None)
+            if selected:
+                filters['hospital_id'] = selected
+        if slots.get('session'):
+            filters['preferred_time'] = session_label(slots['session'])
+        try:
+            queried = await query_hospital(ctx, trace, **filters)
+        except HospitalQueryError as error:
+            await say('号源查询暂时失败：' + str(error), f'care:query-error:{source or trace.turn}', source=source)
+            return None
+        available = [s for s in queried if s['status'] == 'available']
         lines = []
         for campus in H.catalog()['campuses']:
+            if filters.get('hospital_id') and campus.get('hospitalId') != filters['hospital_id']:
+                continue
             choices = [s for s in available if s['campusId'] == campus['id']]
             if choices:
                 first = choices[0]
@@ -645,7 +686,7 @@ async def handle_booking_request(agent, user_id, text_, *, source=None, speaker=
             else:
                 lines.append(f"{campus['name']}：暂无符合条件的号源")
         requested = (slots.get('date') or '未来七天') + (' ' + slots['time'] if slots.get('time') else '')
-        await say(dept['name'] + '模拟号源（' + requested + '）：\n' + '\n'.join(lines) + '。以上为模拟号源查询结果。', f'care:query:{source}')
+        await say(dept['name'] + '模拟号源（' + requested + '）：\n' + '\n'.join(lines) + '。以上为模拟号源查询结果。', f'care:query:{source}', source=source)
         return None
     patient = slots['patient']
     if not patient:
@@ -686,12 +727,16 @@ async def handle_booking_request(agent, user_id, text_, *, source=None, speaker=
         key = f"hospital-apps:{source or uuid.uuid4().hex}:{date}:{session}"
         await post_card(key, 'hospital_apps', '选择医院应用', {
             'patient': patient, 'real_name': real_name(patient), 'department': dept['name'],
-            'date': date, 'session': session, 'hospitals': [{**h, 'available': any(H.campus(cid).get('hospitalId') == h['id'] for cid in dept['campusIds'])} for h in H.catalog()['hospitals']]}, ['choose_hospital'])
+            'source_id': source, 'date': date, 'session': session, 'hospitals': [{**h, 'available': any(H.campus(cid).get('hospitalId') == h['id'] for cid in dept['campusIds'])} for h in H.catalog()['hospitals']]}, ['choose_hospital'])
         return key
     if selected_hospital and not any(H.campus(cid).get('hospitalId') == selected_hospital for cid in dept['campusIds']):
         await say(f'所选医院暂未提供{dept["name"]}模拟门诊，请选择另一家医院或科室。', f'care:unsupported:{source}:{selected_hospital}')
         return None
-    options, compare, fam_doc = await build_options(patient, dept['id'], date, session, trace)
+    try:
+        options, compare, fam_doc = await build_options(patient, dept['id'], date, session, trace, ctx=ctx)
+    except HospitalQueryError as error:
+        await say('号源查询暂时失败：' + str(error), f'care:query-error:{source or trace.turn}', source=source)
+        return None
     if selected_hospital:
         options = [o for o in options if o.get('hospital_id') == selected_hospital]
         compare = [o for o in compare if H.campus(o['campus_id']).get('hospitalId') == selected_hospital]
@@ -709,7 +754,7 @@ async def handle_booking_request(agent, user_id, text_, *, source=None, speaker=
         await post_card(key, 'hospital_options', f"{dept['name']} · 模拟号源", {
             **meta, 'patient_name': display(patient), 'department_id': dept['id'], 'date': date,
             'date_label': democlock.date_label(date), 'session': session, 'options': options,
-            'compare': compare, 'weights': WEIGHTS, 'requested_by': speaker}, ['choose', 'next_day'])
+            'compare': compare, 'weights': WEIGHTS, 'requested_by': speaker, 'source_id': source}, ['choose', 'next_day'])
         return key
     return await start_booking(agent, user_id, top, meta, origin_key=f"auto:{source}:{date}:{session}", trace=trace)
 
@@ -1096,7 +1141,14 @@ async def followup_briefing(agent, item):
     day_n = (democlock.local(democlock.at(democlock.today())) - democlock.local(democlock.at(item['visit_start']))).days + 1
     await trace.step('rule', 'DemoClock 到点：复诊前一天 20:00', f"{real_name(who)}康复第 {day_n} 天，明天 {item['date']} 复诊")
     await trace.step('rule', '汇总两周打卡', f"用药 {med_s['taken']}/{med_s['total']} · 康复 {rehab_s['taken']}/{rehab_s['total']}" if med_s and rehab_s else '无打卡数据')
-    slots = [s for s in H.find_slots(item['dept_id'], item['date'], 'morning', item['campus_id'], item['doctor_id']) if s['status'] == 'available']
+    ctx = appointment_context(ids()[CAREGIVER], item.get('source_id'), trace)
+    try:
+        queried = await query_hospital(ctx, trace, department=H.department(item['dept_id'])['name'],
+            date=item['date'], preferred_time='上午', campus_id=item['campus_id'], doctor_id=item['doctor_id'])
+    except HospitalQueryError:
+        await say('复诊号源暂时查询失败，请稍后重试。', f"care:followup-query-error:{item['key']}:{democlock.today()}")
+        return
+    slots = [s for s in queried if s['status'] == 'available']
     slots.sort(key=lambda s: (s['startTime'] != '08:30', s['startTime']))
     dists = await distances([item['campus_id']], trace)
     option = option_from_slot(slots[0], dists[item['campus_id']], H.history_count(FAMILY[who]['patient_id'], item['campus_id']),
@@ -1396,7 +1448,7 @@ async def act_on_card(agent, card_id, action, payload, user_id):
             return await update_card(card_id, status='done', data={'result': '先不挂号'}, actions=[])
         await update_card(card_id, status='done', data={'result': f'{display(who)}：好的，帮挂号'}, actions=[])
         trace = Trace('「小艺建议」→ 一句话挂号', card['message_id'])
-        await handle_booking_request(agent, user_id, '', source=card['message_id'], speaker=who, trace=trace,
+        await handle_booking_request(agent, user_id, '', source=d.get('source_id') or card['message_id'], speaker=who, trace=trace,
                                      preset={'patient': d['member'], 'department': d['department'], 'date': d['date'], 'session': d['session']})
     elif ctype == 'hospital_apps':
         hospital_id = (payload or {}).get('option')
@@ -1404,12 +1456,12 @@ async def act_on_card(agent, card_id, action, payload, user_id):
         if not hospital or hospital.get('available') is False:
             raise HTTPException(422, '所选医院未提供该科室，请选择其他医院')
         await update_card(card_id, status='done', data={'result': '已选择 ' + hospital['name']}, actions=[])
-        return await handle_booking_request(agent, user_id, '', source=card['message_id'], speaker=who,
+        return await handle_booking_request(agent, user_id, '', source=d.get('source_id') or card['message_id'], speaker=who,
             preset={**{k: d[k] for k in ('patient', 'department', 'date', 'session')}, 'hospital_id': hospital_id})
     elif ctype == 'hospital_options':
         if action == 'next_day':
             await update_card(card_id, status='done', data={'result': '看看后一天'}, actions=[])
-            await handle_booking_request(agent, user_id, '', source=card['message_id'], speaker=who,
+            await handle_booking_request(agent, user_id, '', source=d.get('source_id') or card['message_id'], speaker=who,
                                          preset={'patient': d['patient'], 'department': d['department'], 'date': democlock.shift_date(d['date'], 1), 'session': d['session']})
         else:
             option = next((o for o in d['options'] if o['id'] == (payload or {}).get('option')), None)
@@ -1419,7 +1471,7 @@ async def act_on_card(agent, card_id, action, payload, user_id):
             if not fresh or fresh['status'] != 'available':
                 await say('哎呀，这个号刚被约走了，我再帮你看看别的。', f'care:gone:{card_id}:{option["id"]}')
                 await update_card(card_id, status='done', data={'result': '号源已变化'}, actions=[])
-                return await handle_booking_request(agent, user_id, '', source=card['message_id'], speaker=who,
+                return await handle_booking_request(agent, user_id, '', source=d.get('source_id') or card['message_id'], speaker=who,
                                                     preset={'patient': d['patient'], 'department': d['department'], 'date': d['date'], 'session': d['session']})
             await update_card(card_id, status='done', data={'chosen': option['id'], 'result': f"已选 {option['campus']} · {option['doctor']} {option['time']}"}, actions=[])
             trace = Trace('选定号源 → 浏览器代办', card['message_id'])
@@ -1474,7 +1526,7 @@ async def act_on_card(agent, card_id, action, payload, user_id):
         option = d.get('option')
         if action == 'reschedule' or not option:
             await update_card(card_id, status='done', data={'result': '改约其他时间'}, actions=[])
-            await handle_booking_request(agent, user_id, '', source=card['message_id'], speaker=who,
+            await handle_booking_request(agent, user_id, '', source=d.get('source_id') or card['message_id'], speaker=who,
                                          preset={'patient': d['patient'], 'department': d['department'], 'date': democlock.shift_date(d['date'], 1), 'session': 'morning'})
         else:
             await update_card(card_id, status='done', data={'result': f"已确认 {option['doctor']} {option['time']}"}, actions=[])

@@ -65,6 +65,7 @@ async def test_query_tool_honors_exact_time(family,monkeypatch):
     monkeypatch.setattr(H,'generate_slots',lambda dates=None:[{**slot,'startTime':'14:00'},{**slot,'startTime':'16:00'}])
     result=await hospital_simulator(SkillContext(1,3,'clock-query',0),{'action':'query','department':'骨科','date':tomorrow,'time':'16:00'})
     assert result['slots'] and all(s['startTime']=='16:00' for s in result['slots'])
+    assert result['query']['time']=='16:00' and result['query']['department']=='骨科'
 
 
 def test_24_hour_clock_keeps_afternoon_even_without_period_word():
