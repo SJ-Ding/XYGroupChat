@@ -1,13 +1,12 @@
 """Narrow grants from explicit source commands, independent of model guesses."""
 import re
 from .contracts import ActionGrant
-from .persona import names_for
+from .addressing import strip_assistant_address
 from .reminder_language import reminder_request
 
 
 def command_grants(text, agent_name, created):
-    names = '|'.join(re.escape(name) for name in names_for(agent_name))
-    text = re.sub(r'^\s*@?(?:' + names + r')(?=\s|[，。！？,:：!?]|$)[\s，,:：]*', '', text).strip()
+    text = strip_assistant_address(text, agent_name)
     text = re.sub(r'^(?:请帮我|帮我|请)\s*', '', text)
     # Only unambiguous, supported commands grant side effects. Other phrasing
     # may be answered with instructions to use the explicit task/reminder form.

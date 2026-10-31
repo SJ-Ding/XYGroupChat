@@ -10,9 +10,10 @@ def decide(event, intent, settings):
         return ParticipationDecision('reply', '直接向助手发起请求', intent.topic)
     if intent.kind != 'request' or intent.confidence < .85:
         return ParticipationDecision('silent', '不是确定的求助，保持安静', intent.topic)
-    # Model labels alone cannot turn a declarative plan update into a request.
-    # Explicit named addresses (including natural “小艺，…”) take the direct path.
-    if not re.search(r'[？?]|怎么|如何|帮我|帮忙|麻烦|请|能否|能不能|谁能|谁来|有没有|是否|告诉我|查一下|查查|查询|搜索|推荐|解释|算一下|计算|整理一下|列出|给我|提醒(?:我|我们)|[吗么呢](?:[。！!\s]*$)',event.content):
+    # Guard concrete status updates without imposing a vocabulary whitelist on requests.
+    request_words = re.search(r'[？?]|怎么|如何|怎样|几点|何时|[吗么呢](?:[。！!\s]*$)|帮|请|麻烦|能否|能不能|提醒|查|告诉|整理|安排一下|给出|列|总结|对比|解读|说明|生成|压缩|梳理|改写|推荐|预定|预约', event.content)
+    statement = re.search(r'^(?:我|我们).*(?:安排|计划|行程|事情).*(?:改到|改成|改为|取消了|完成了)|^我(?:们)?(?:已经)?(?:改到|改成|打算|准备|考虑|决定)|^我(?:们)?(?:今天|明天|后天|周[一二三四五六日天]|星期).*(?:出门|出发|回家|去|开会|看病|复诊)', event.content)
+    if statement and not request_words:
         return ParticipationDecision('silent', '近况陈述不触发跟进', intent.topic)
     if intent.target == 'agent':
         return ParticipationDecision('reply', '明确面向助手的请求，无需等待家人回应', intent.topic)

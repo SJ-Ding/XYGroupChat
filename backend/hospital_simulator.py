@@ -13,6 +13,7 @@ import webbrowser
 import httpx
 
 from .db import DB, Message, get, put
+from .appointment_intent import appointment_operation
 from .cards import save_card
 from .skills import REGISTRY, Tool, register, schema
 
@@ -81,7 +82,7 @@ SYMPTOM_DEPARTMENTS = {
 
 
 def hospital_relevant(text: str) -> bool:
-    return bool(HOSPITAL_RE.search(text or ""))
+    return bool(HOSPITAL_RE.search(text or "") or appointment_operation(text))
 
 
 def hospital_base(hospital_id=None) -> str:
@@ -149,9 +150,7 @@ def _source_text(ctx) -> str:
 
 
 def _explicit_booking(text: str) -> bool:
-    if re.search(r"(不要|不用|别|先别|不)(?:帮我|给我|再)?(?:预约|挂号)", text):
-        return False
-    return bool(re.search(r"(挂号|预约|就诊|模拟医院|模拟器)", text))
+    return appointment_operation(text) == 'book'
 
 
 def _explicit_cancel(text: str) -> bool:
@@ -589,6 +588,7 @@ async def hospital_simulator(ctx, args):
                   and (not args.get('hospital_id') or s.get('hospitalId') == args['hospital_id'])
                   and (not args.get('campus_id') or s['campusId'] == args['campus_id'])
                   and (not args.get('doctor_id') or s['doctorId'] == args['doctor_id'])
+                  and (not args.get('time') or s['startTime'] == args['time'])
                   and (not args.get('preferred_time') or s['session'] == ('morning' if args['preferred_time'] == '上午' else 'afternoon'))]
         return {"slots": result, "simulated": True, "hospitals": H.catalog().get('hospitals', [])}
     if action == "open":
@@ -745,6 +745,7 @@ register(Tool(
         "campus_id": {"type": "string", "maxLength": 40},
         "doctor_id": {"type": "string", "maxLength": 40},
         "date": {"type": "string", "maxLength": 10},
+        "time": {"type": "string", "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$"},
         "patient_id": {"type": "string", "maxLength": 40},
     }, ["action"]),
     hospital_simulator,

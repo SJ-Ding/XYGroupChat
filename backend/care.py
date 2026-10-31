@@ -25,6 +25,8 @@ from . import hospital_data as H
 from .care_seed import FAMILY, CAREGIVER, ELDERS, HOME, GID, day0
 from .db import DB, Message, User, get, put, records
 from .memory import save_memory, list_profile
+from .addressing import unquoted_text
+from .appointment_intent import BOOKING_RE, NEGATION_RE, appointment_operation, appointment_time
 
 _AGENT = None
 _last_tick = 0.0
@@ -165,8 +167,6 @@ RED_FLAGS = [
     (re.compile(r'大出血|血止不住|吐血|咳血'), '大量出血，属于急症'),
     (re.compile(r'头.{0,3}(疼|痛)得.{0,4}(裂|受不了|从没)|剧烈头痛'), '突发剧烈头痛，需要排除急症'),
 ]
-BOOKING_RE = re.compile(r'挂.{0,10}号|约.{0,10}号|挂个|预约.{0,12}(医生|门诊|号|专家|复诊|科)|挂(骨科|心内|专家|门诊)|看.{0,8}号')
-NEGATION_RE = re.compile(r'(不要|不用|别|先别|不想|不必)(帮|给)?.{0,4}(挂|约|预约)|取消')
 SYMPTOM_RE = re.compile(r'疼|痛|酸|胀|麻|晕|咳|喘|不舒服|难受|发烧|发热|没力气|睡不着|心慌|胸闷|拉肚子|肿')
 CHECKIN_RE = re.compile(r'(药.{0,4}(吃了|吃过|吃完|已吃))|(吃(过|了|完)药)|(已经吃了)')
 SYMPTOMS = {
@@ -240,8 +240,10 @@ def rule_slots(text, speaker):
     if dept is None:
         dept = {'心内': '心血管内科', '骨': '骨科'}.get(next((k for k in ('心内', '骨') if k + '科' in text), ''), None)
     symptom, symptom_dept = symptom_of(text)
+    clock = appointment_time(text)
+    session = parse_session(text) or ('afternoon' if clock and clock >= '12:00' else 'morning' if clock else None)
     return {'patient': patient, 'department': dept or symptom_dept, 'symptom': symptom,
-            'date': parse_date(text), 'session': parse_session(text)}
+            'date': parse_date(text), 'session': session, 'time': clock}
 
 
 def recent_symptom(login, hours=48):
@@ -495,11 +497,11 @@ async def build_options(login, dept_id, date, session, trace):
 
 
 # ---------------------------------------------------------------- 主入口：群消息
-async def on_message(agent, gid, message):
+async def on_message(agent, gid, message, *, intent=None, emergency_only=False):
     """就医场景的快速通道。返回 True 表示已由就医编排接管（不再走通用回复）。"""
     if gid != GID or message.user_id == 0:
         return False
-    text_ = (message.content or '').strip()
+    text_ = unquoted_text(message.content).strip()
     if not text_ or text_.startswith('【演示】'):
         return False
     speaker = login_of(message.user_id)
@@ -510,11 +512,16 @@ async def on_message(agent, gid, message):
     if reason:
         await handle_emergency(message, speaker, text_, reason)
         return True
+    if emergency_only:
+        return False
     if speaker in ELDERS and CHECKIN_RE.search(text_) and await handle_checkin_text(message, speaker):
         return True
-    medical = re.search(r'挂.{0,10}号', text_) or re.search(r'医院|医生|门诊|科|复诊|专家|看病|号源', text_)
-    if (BOOKING_RE.search(text_) or re.search(r'查.*号源|科.*有号吗|查询.*科', text_)) and medical and not NEGATION_RE.search(text_):
-        await handle_booking_request(agent, message.user_id, text_, source=message.id, speaker=speaker)
+    operation = appointment_operation(text_)
+    semantic = bool(intent and intent.kind == 'request' and not intent.quoted and intent.confidence >= .85
+        and intent.target == 'agent' and intent.scene == 'family-appointment' and intent.operation in ('query', 'book'))
+    if (operation or semantic) and not NEGATION_RE.search(text_):
+        await handle_booking_request(agent, message.user_id, message.content, source=message.id, speaker=speaker,
+            query_only=(intent.operation if semantic else operation) == 'query')
         return True
     if speaker in ELDERS and SYMPTOM_RE.search(text_) and symptom_of(text_)[1]:
         return await handle_need_hint(agent, message, speaker, text_)
@@ -571,12 +578,12 @@ async def handle_need_hint(agent, message, speaker, text_):
 BOOKING_SYSTEM = '''你是家庭就医守护助手“小艺”的挂号理解模块，只输出 JSON，不输出其他文字。
 根据家庭成员名单、医疗档案和最新消息，理解这次要给谁挂什么科、哪天、上午还是下午。
 规则：就诊人只能是 mom/dad/child 之一；科室必须从 departments 中选择；日期用 YYYY-MM-DD，today 已给出；
-信息不明确时优先用医疗档案和偏好补全（例如膝盖旧伤→骨科、偏好上午），实在无法确定填 null。不诊断、不推荐药物。
+“预定/预订/订号/排门诊/约个号”是挂号表达，显式@在任何位置均表示本次求助；历史只补全省略的患者、科室和偏好，不创造新请求。明确的上午/下午必须保留，不以默认偏好覆盖。日期按today计算，无法确定时填null，不猜测年份。信息不明确时优先用医疗档案和偏好补全（例如膝盖旧伤→骨科、偏好上午），实在无法确定填 null。不诊断、不推荐药物。
 输出：{"patient":"mom/dad/child/null","department":"科室名/null","date":"YYYY-MM-DD/null","session":"morning/afternoon/null",
 "symptom":"简短症状/null","reply":"给家人的一句话回复，口语、温暖、不超过40字，说明你按什么去找号"}'''
 
 
-async def handle_booking_request(agent, user_id, text_, *, source=None, speaker=None, preset=None, trace=None):
+async def handle_booking_request(agent, user_id, text_, *, source=None, speaker=None, preset=None, trace=None, query_only=None):
     speaker = speaker or login_of(user_id)
     trace = trace or Trace('一句话挂号', source)
     await trace.step('rule', '意图识别：挂号请求', f'“{text_[:40]}”' if text_ else '来自「小艺建议」卡')
@@ -605,15 +612,30 @@ async def handle_booking_request(agent, user_id, text_, *, source=None, speaker=
             await trace.step('llm', f'大模型理解请求 · {model_name()}', '，'.join(f'{k}={result.get(k)}' for k in ('patient', 'department', 'date', 'session') if result.get(k)))
         else:
             await trace.step('rule', '大模型理解（跳过）', err)
-    query_only = bool(re.search(r'查询|查一下|看看|有哪些|有号吗|号源', text_ or '') and not re.search(r'帮.*挂|预约|办理|挂个|挂一个|并.*挂|然后.*挂|直接.*挂', text_ or ''))
-    if query_only and not slots['patient']:
-        dept = H.department_by_name(slots.get('department') or '')
+    query_only = appointment_operation(text_ or '') == 'query' if query_only is None else query_only
+    if query_only and (not slots['patient'] or slots.get('time')):
+        dept_name = slots.get('department')
+        member = slots.get('patient') or (speaker if speaker in ELDERS else None)
+        if not dept_name and member:
+            dept_name = recent_symptom(member)[1]
+            if not dept_name and FAMILY[member].get('dept'):
+                dept_name = H.department(FAMILY[member]['dept'])['name']
+        if not dept_name and source:
+            with DB() as db:
+                recent = db.query(Message).filter(Message.group_id == GID, Message.id < source,
+                    Message.user_id != 0, Message.created >= democlock.now() - 48 * 3600).order_by(Message.id.desc()).limit(10).all()
+            for message in recent:
+                dept_name = rule_slots(unquoted_text(message.content), login_of(message.user_id))['department']
+                if dept_name:
+                    break
+        dept = H.department_by_name(dept_name or '')
         if not dept:
             await say('想查哪个科室的号源？', f'care:query-dept:{source}')
             return None
         dates = [slots['date']] if slots.get('date') else H.window()
         available = [s for s in H.generate_slots(dates) if s['departmentId'] == dept['id'] and s['status'] == 'available'
-            and (not slots.get('session') or s['session'] == slots['session'])]
+            and (not slots.get('session') or s['session'] == slots['session'])
+            and (not slots.get('time') or s['startTime'] == slots['time'])]
         lines = []
         for campus in H.catalog()['campuses']:
             choices = [s for s in available if s['campusId'] == campus['id']]
@@ -622,7 +644,8 @@ async def handle_booking_request(agent, user_id, text_, *, source=None, speaker=
                 lines.append(f"{campus['name']}：{first['date']} {first['startTime']}，{H.doctor(first['doctorId'])['name']}，¥{first['price']}，余{first['remaining']}号")
             else:
                 lines.append(f"{campus['name']}：暂无符合条件的号源")
-        await say(dept['name'] + '模拟号源：\n' + '\n'.join(lines) + '。需要办理时告诉我就诊人。', f'care:query:{source}')
+        requested = (slots.get('date') or '未来七天') + (' ' + slots['time'] if slots.get('time') else '')
+        await say(dept['name'] + '模拟号源（' + requested + '）：\n' + '\n'.join(lines) + '。以上为模拟号源查询结果。', f'care:query:{source}')
         return None
     patient = slots['patient']
     if not patient:

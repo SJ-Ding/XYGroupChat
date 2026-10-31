@@ -7,7 +7,7 @@ import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
-from .persona import names_for
+from .addressing import strip_assistant_address
 
 ZONE = ZoneInfo('Asia/Shanghai')
 NUMBER = r'[0-9零〇一二两三四五六七八九十百]+'
@@ -37,8 +37,7 @@ def number(value):
 
 
 def reminder_request(text, agent_name, created):
-    names = '|'.join(re.escape(name) for name in names_for(agent_name))
-    text = re.sub(r'^\s*@?(?:' + names + r')(?=\s|[，。！？,:：!?]|$)[\s，,:：]*', '', text).strip()
+    text = strip_assistant_address(text, agent_name)
     text = re.sub(r'^(?:请帮我|麻烦你|麻烦|帮我|请)\s*', '', text)
     if '\n' in text or any(mark in text for mark in ['“', '”', '「', '」', '"', '>']):
         return None

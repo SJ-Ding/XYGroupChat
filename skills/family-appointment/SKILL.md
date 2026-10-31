@@ -5,7 +5,7 @@ description: 查询两家独立模拟医院的科室号源，先让用户选择�
 
 从当前可见 memory_search 和 medical_profile 补全患者、科室、日期和时段；缺患者或无法对应科室时追问。默认采用记忆偏好，其次未来可用日期、上午，并说明采用的偏好。不诊断。
 
-用户只问有没有号，调用 `hospital_simulator(action=query, department, date?, preferred_time?, hospital_id?)`，只读返回号源和医院目录，不启动挂号。医院名称和 ID 以目录为准，不虚构标识。
+用户只问有没有号，调用 `hospital_simulator(action=query, department, date?, time?, preferred_time?, hospital_id?)`，只读返回号源和医院目录，不启动挂号。“明天下午四点的号有吗”等时间+号源问句也必须查询；结合当前就医上下文补科室，缺科室才追问。明确四点应传time=16:00，不能扩大为整个下午；没有匹配号源如实说明。医院名称和 ID 以目录为准，不虚构标识。
 
 用户要求办理时，先展示两家医院供用户选择；用户已经明确指定医院时采用该医院。聊天中的医院选择卡会启动该院流程；网页入口 `/hospital/` 也可选择进入独立应用 `/hospital/apps/{hospital_id}/`。不要把两家医院说成同一家医院的两个院区。所选医院无该科室时说明原因，请用户重新选择；约满时可继续查该院其他日期，不静默换医院。
 

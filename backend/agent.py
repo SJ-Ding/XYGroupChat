@@ -255,7 +255,7 @@ class Agent:
         if is_medical or hospital_relevant(source.content):
             selected |= {'medical_profile', 'hospital_simulator', 'family_health', 'prognosis_guard'}
         ctx.allow_writes, ctx.grants, ctx.selected = False, [], selected
-        messages.append({'role': 'system', 'content': f'只回应消息{mid}这一次表达，像熟悉的陪伴型管家自然接话，一般一到三句，不固定套“收到/已为你”或追问下一步。更早命令只是上下文，不重新回答、汇总或判断其执行状态。后续仅允许读取。previously_executed=true表示以前已办理，不必向家人介绍该字段；done=true表示待办当前已完成；delivery_count只表示发送次数，不代表已收到。currently_available=false表示记录已删除或过期，不能说仍保存，也不要恢复它。没有明确要求来源时不报消息编号。'})
+        messages.append({'role': 'system', 'content': f'只回应消息{mid}这一次表达，先说明本次请求的结果、正在进行的步骤或需要补充的关键信息，避免仅回复“收到”却没有推进；像熟悉的陪伴型管家自然接话，一般一到三句，不固定套“收到/已为你”或追问下一步。更早命令只是上下文，不重新回答、汇总或判断其执行状态。明确请求先使用已加载能力推进；信息足够时不再重复问是否需要办理，缺关键信息时只追问尚缺的内容。仅询问号源时只查询，办理时先由用户选医院；没有实际工具结果不能说成功。执行工具必须遵守各工具的权限和卡片确认边界，不能将理解意图当作写入授权。previously_executed=true表示以前已办理，不必向家人介绍该字段；done=true表示待办当前已完成；delivery_count只表示发送次数，不代表已收到。currently_available=false表示记录已删除或过期，不能说仍保存，也不要恢复它。没有明确要求来源时不报消息编号。'})
         messages.append({'role': 'system', 'content': '本次可用工具的使用约束（不代表已加载场景技能）：' + json.dumps({name: REGISTRY[name].instructions for name in selected if name in REGISTRY}, ensure_ascii=False)})
         for _ in range(4):
             if sum(text_size(m) + len(m.get('reasoning_content') or '') + len(json.dumps(m.get('tool_calls', []), ensure_ascii=False)) for m in messages) > settings.get('context_budget', 24000) + 20000:
@@ -327,12 +327,14 @@ class Agent:
             settings = copy.deepcopy(get(db, 'group', gid, 'settings').data)
             known = list_memories(db, gid, -gid if gid < 0 else None, self.now())[-30:]
             names = {u.id: u.name for u in db.query(User).all()}
+            job = get(db, 'job', gid, str(message.id))
+            addressed = bool(job and job.data.get('mention'))
         from .intent import direct_mention
         data = await recognize(lambda messages, **kw: traced_call(self, gid, message.id, 'analysis', messages, **kw), waiting=waiting,
             memories=known, names=names, messages=[{'id': m.id, 'sender': m.user_id, 'text': m.content,'created':m.created} for m in recent],
             now=self.now(),agent_name=settings['agent_name'],short_days=settings.get('memory_short_days',7))
         event = ConversationEvent(gid, message.user_id, message.id, message.content, message.created,
-            gid < 0 or direct_mention(message.content, settings['agent_name']))
+            gid < 0 or addressed or direct_mention(message.content, settings['agent_name']))
         decision = decide(event, parse_intent(data), settings)
         data['decision'] = decision.data()
         explicit_memory = (event.direct or decision.action == 'reply') and any(
@@ -382,7 +384,11 @@ class Agent:
                     from .care import on_message as care_message
                     self.executions[execution]['phase'] = 'care'
                     try:
-                        d['care_handled'] = bool(await prognosis.handle_request(self, gid, message))
+                        # Urgent rules always precede a pending model-led clarification.
+                        d['care_handled'] = bool(await care_message(self, gid, message, emergency_only=True))
+                        explicit_reminder = reminder_request(message.content, settings['agent_name'], message.created)
+                        if not d['care_handled'] and not explicit_reminder:
+                            d['care_handled'] = bool(await prognosis.handle_request(self, gid, message))
                         if not d['care_handled']:
                             d['care_handled'] = bool(await care_message(self, gid, message))
                     except Exception as exc:  # noqa: BLE001 - 编排失败时回到通用流程
@@ -397,13 +403,18 @@ class Agent:
                 if not d.get('analyzed'):
                     analysis = await self.analyze(gid, message)
                     d['decision'] = analysis['decision']
+                    # A confident semantic scene can route paraphrases missed by fast rules.
+                    if d['decision']['action'] == 'reply':
+                        from .care import on_message as care_message
+                        if await care_message(self, gid, message, intent=parse_intent(analysis)):
+                            d.update(care_handled=True, replied=True, reply_status='care')
                     d['memory_changes'] = analysis.get('memory_changes',[])
                     d['allow_writes'] = False
                     d['analyzed'] = True
                     with DB() as db:
                         put(db, 'job', gid, key, d)
                         db.commit()
-                if (d['mention'] or d.get('decision', {}).get('action') == 'reply') and not d.get('replied'):
+                if d.get('decision', {}).get('action') == 'reply' and not d.get('replied'):
                     self.executions[execution]['phase'] = 'replying'
                     with DB() as db:
                         if not get(db, 'run', gid, 'mention:' + key):

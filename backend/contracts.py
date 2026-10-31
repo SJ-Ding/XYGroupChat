@@ -21,6 +21,8 @@ class Intent:
     confidence: float = 0
     assistant_helpful: bool = False
     quoted: bool = False
+    scene: str | None = None
+    operation: str | None = None
 
 
 @dataclass(frozen=True)

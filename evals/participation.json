@@ -15,5 +15,12 @@
   {"id":"historical_quarter_reminder","text":"三点一刻的时候提醒我出门","intent":{"kind":"request","target":"agent","confidence":0.95,"assistant_helpful":true},"expected":"reply"},
   {"id":"reminder_to_member","text":"妈妈，三点一刻的时候提醒我出门","intent":{"kind":"request","target":"member","confidence":0.95,"assistant_helpful":false},"expected":"silent"},
   {"id":"plan_not_request","text":"我明天下午三点出门","intent":{"kind":"request","target":"agent","confidence":0.99,"assistant_helpful":true},"expected":"silent"},
-  {"id":"quoted_reminder","text":"他说“三点一刻提醒我出门”","intent":{"kind":"request","target":"agent","confidence":0.95,"quoted":true},"expected":"silent"}
+  {"id":"quoted_reminder","text":"他说“三点一刻提醒我出门”","intent":{"kind":"request","target":"agent","confidence":0.95,"quoted":true},"expected":"silent"},
+  {"id":"trailing_appointment_mention","text":"预定明天下午的号@小艺","intent":{"kind":"request","target":"agent","confidence":0.95,"assistant_helpful":true,"scene":"family-appointment","operation":"book"},"expected":"reply"},
+  {"id":"inline_mention","text":"帮我@小艺查一下号源","intent":{"kind":"request","target":"agent","confidence":0.95,"scene":"family-appointment","operation":"query"},"expected":"reply"},
+  {"id":"clear_request_without_polite_words","text":"这份方案压缩成三条","intent":{"kind":"request","target":"agent","confidence":0.95},"expected":"reply"},
+  {"id":"fullwidth_mention","text":"明天下午挂骨科的号＠小艺","intent":{"kind":"request","target":"agent","confidence":0.95},"expected":"reply"},
+  {"id":"quoted_trailing_mention","text":"她说“预定明天的号@小艺”","intent":{"kind":"request","target":"agent","confidence":0.95,"quoted":true},"expected":"silent"},
+  {"id":"direct_plan_acknowledgement","text":"行程改到后天了@小艺","intent":{"kind":"discussion","target":"agent","confidence":0.95},"expected":"reply"},
+  {"id":"plan_with_real_question","text":"我明天去医院几点出门合适吗","intent":{"kind":"request","target":"agent","confidence":0.95},"expected":"reply"}
 ]
