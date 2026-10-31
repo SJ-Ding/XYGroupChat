@@ -118,10 +118,10 @@ async def test_missing_time_gets_clarification_instead_of_false_confirmation():
     await a.close()
 
 @pytest.mark.parametrize('text,intent,active,expected',[
-    ('顾村公园下午开放吗',Intent(kind='request',target='agent',confidence=.95,assistant_helpful=True),True,'reply'),
-    ('三点一刻的时候提醒我出门',Intent(kind='request',target='agent',confidence=.95,assistant_helpful=True),False,'reply'),
-    ('我去图书馆的安排改到后天下午',Intent(kind='request',target='agent',confidence=.99,assistant_helpful=True),True,'silent'),
-    ('妈妈，晚饭怎么安排',Intent(kind='request',target='member',confidence=.95,assistant_helpful=True),True,'observe'),
+    ('顾村公园下午开放吗',Intent(engagement='implicit_request',kind='request',target='agent',confidence=.95,assistant_helpful=True),True,'reply'),
+    ('三点一刻的时候提醒我出门',Intent(engagement='implicit_request',kind='request',target='agent',confidence=.95,assistant_helpful=True),False,'reply'),
+    ('我去图书馆的安排改到后天下午',Intent(engagement='implicit_request',kind='request',target='agent',confidence=.99,assistant_helpful=True),True,'silent'),
+    ('妈妈，晚饭怎么安排',Intent(engagement='unresolved_need',kind='request',target='member',confidence=.95,assistant_helpful=True),True,'observe'),
 ])
 def test_participation_respects_target_and_statement_guard(text,intent,active,expected):
     event=ConversationEvent(1,2,9,text,T)

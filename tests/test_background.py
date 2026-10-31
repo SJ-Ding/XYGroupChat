@@ -37,7 +37,7 @@ async def test_slow_skill_does_not_block_chat_and_dispatch_is_unique():
     class Model:
         async def call(self, messages, tools=None, structured=False):
             if structured:
-                return {'new_need': None, 'updates': [], 'memories': [], 'reason': '聊天'}
+                return {'intent': {'kind':'request','target':'agent','engagement':'addressed','confidence':.99}, 'new_need': None, 'updates': [], 'memories': [], 'reason': '聊天'}
             if messages[-1]['role'] == 'tool':
                 entered.set()
                 await gate.wait()

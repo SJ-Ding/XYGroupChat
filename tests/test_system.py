@@ -12,7 +12,7 @@ from backend.skills import execute, SkillContext
 
 class FakeModel:
     def __init__(self, analysis=None):
-        self.analysis = analysis or {'new_need': None, 'updates': [], 'memories': [], 'reason': '普通聊天'}
+        self.analysis = analysis or {'intent': {'kind':'request','target':'agent','engagement':'addressed','confidence':.99}, 'new_need': None, 'updates': [], 'memories': [], 'reason': '明确召唤'}
         self.gate = None
         self.calls = []
     async def call(self, messages, tools=None, structured=False):

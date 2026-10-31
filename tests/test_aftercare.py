@@ -149,7 +149,7 @@ async def test_vision_failures_do_not_create_plans():
 async def test_text_orders_and_emergency_priority():
     agent = make_agent()
     line = "医生开了醋氯芬酸片 0.1g 每日2次 吃3天，七厘胶囊 1g 每日2次 吃3天，1周后骨科复诊"
-    assert await care.on_message(agent, 1, source("child", line))
+    assert await care.on_message(agent, 1, source("child", line + "，帮我整理用药计划"))
     data = cards("care_plan")[-1]["care"]["data"]
     assert len([row for row in data["items"] if row["type"] == "medication"]) == 2
     plans_before = len(cards("care_plan"))

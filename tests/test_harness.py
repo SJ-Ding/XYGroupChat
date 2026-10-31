@@ -41,7 +41,7 @@ def message(text, gid=1, user_id=1):
     ('request','agent',.95,True,'reply'),
 ])
 async def test_understanding_does_not_automatically_trigger_participation(kind,target,confidence,helpful,expected):
-    model = FakeModel({'intent': {'kind':kind,'target':target,'topic':'晚餐','confidence':confidence,'assistant_helpful':helpful},
+    model = FakeModel({'intent': {'kind':kind,'target':target,'engagement':'implicit_request' if target=='agent' else 'unresolved_need','topic':'晚餐','confidence':confidence,'assistant_helpful':helpful},
                        'new_need': {'text':'晚餐怎么安排','target':'爸爸'}, 'memories':[]})
     a = Agent(no_broadcast,model,lambda:100)
     result = await a.analyze(1,message('今晚饭菜怎么安排'))
@@ -56,7 +56,7 @@ async def test_understanding_does_not_automatically_trigger_participation(kind,t
 async def test_shadow_participation_records_decision_without_candidate():
     with DB() as db:
         r=get(db,'group',1,'settings');r.set({**r.data,'participation_shadow':True});db.commit()
-    model=FakeModel({'intent':{'kind':'request','target':'member','confidence':.98,'assistant_helpful':True},'new_need':{'text':'整理清单'}})
+    model=FakeModel({'intent':{'kind':'request','target':'member','engagement':'unresolved_need','confidence':.98,'assistant_helpful':True},'new_need':{'text':'整理清单'}})
     a=Agent(no_broadcast,model,lambda:100)
     await a.analyze(1,message('爸爸，能帮忙整理清单吗'))
     with DB() as db:
@@ -445,7 +445,7 @@ def test_over_intervention_feedback_suppresses_topic_but_not_direct_requests():
         with DB() as db:
             assert send_policy(db,1,{'settings':settings,'topic':'整理清单','deadline':time.time()},time.time(),settings)=='feedback_suppressed'
         event=ConversationEvent(1,1,99,'@小忆 请整理',time.time(),True)
-        assert decide(event,Intent(kind='request',target='agent',confidence=.99),settings).action=='reply'
+        assert decide(event,Intent(engagement='implicit_request',kind='request',target='agent',confidence=.99),settings).action=='reply'
 
 
 @pytest.mark.asyncio

@@ -17,7 +17,7 @@ def source():
 
 class Planner:
     async def call(self,messages,tools=None,structured=False):
-        if structured: return {'new_need':None,'updates':[],'memories':[],'reason':'明确请求'}
+        if structured: return {'intent': {'kind':'request','target':'agent','engagement':'addressed','confidence':.99}, 'new_need':None,'updates':[],'memories':[],'reason':'明确请求'}
         if messages[-1]['role']=='tool': return {'content':'这是规划结果。'}
         return {'tool_calls':[{'id':'load','type':'function','function':{'name':'skill_load','arguments':'{"name":"family-meals"}'}}]}
 

@@ -47,7 +47,7 @@ def test_inline_address_stripping_preserves_quoted_data_and_reminder_grants():
 
 def test_clear_semantic_requests_do_not_need_fixed_words():
     event=ConversationEvent(1,2,3,'这份方案压缩成三条',1000)
-    intent=Intent(kind='request',target='agent',confidence=.95,assistant_helpful=True)
+    intent=Intent(engagement='implicit_request',kind='request',target='agent',confidence=.95,assistant_helpful=True)
     assert decide(event,intent,{'active':False}).action=='reply'
     assert decide(event,Intent(kind='discussion',confidence=.99),{'active':True}).action=='silent'
 
@@ -66,7 +66,7 @@ class RoutingModel:
         if '挂号理解' in messages[0]['content']:
             return {'patient':'mom','department':'骨科','date':democlock.shift_date(democlock.today(),1),'session':'afternoon'}
         if structured:
-            return {'intent':{'kind':'request','target':'agent','confidence':.95,'quoted':self.quoted,
+            return {'intent':{'kind':'request','target':'agent','engagement':'addressed','confidence':.95,'quoted':self.quoted,
                 'assistant_helpful':True,'scene':'family-appointment','operation':self.operation},'memories':[],'updates':[],'new_need':None}
         return {'role':'assistant','content':'请告诉我还缺的关键信息。'}
 

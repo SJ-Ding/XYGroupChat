@@ -6,7 +6,11 @@ from .contracts import ParticipationDecision
 def decide(event, intent, settings):
     if intent.quoted:
         return ParticipationDecision('silent', '引用不触发助手', intent.topic)
-    if event.direct:
+    if event.group_id < 0:
+        return ParticipationDecision('reply', '私聊直接回应', intent.topic)
+    if intent.engagement in ('mention_only', 'social', 'uncertain'):
+        return ParticipationDecision('silent', '没有当前助手请求，保持安静', intent.topic)
+    if intent.engagement == 'addressed' and event.direct and intent.kind != 'joke':
         return ParticipationDecision('reply', '直接向助手发起请求', intent.topic)
     if intent.kind != 'request' or intent.confidence < .85:
         return ParticipationDecision('silent', '不是确定的求助，保持安静', intent.topic)
@@ -15,9 +19,9 @@ def decide(event, intent, settings):
     statement = re.search(r'^(?:我|我们).*(?:安排|计划|行程|事情).*(?:改到|改成|改为|取消了|完成了)|^我(?:们)?(?:已经)?(?:改到|改成|打算|准备|考虑|决定)|^我(?:们)?(?:今天|明天|后天|周[一二三四五六日天]|星期).*(?:出门|出发|回家|去|开会|看病|复诊)', event.content)
     if statement and not request_words:
         return ParticipationDecision('silent', '近况陈述不触发跟进', intent.topic)
-    if intent.target == 'agent':
+    if intent.target == 'agent' and intent.engagement in ('addressed', 'implicit_request', 'continuation'):
         return ParticipationDecision('reply', '明确面向助手的请求，无需等待家人回应', intent.topic)
-    if settings.get('active') and intent.assistant_helpful:
+    if settings.get('active') and intent.assistant_helpful and intent.engagement == 'unresolved_need':
         return ParticipationDecision('observe', '优先等待家人回应', intent.topic)
     return ParticipationDecision('silent', '没有明确的助手帮助空间', intent.topic)
 

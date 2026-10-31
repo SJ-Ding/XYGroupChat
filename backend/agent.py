@@ -95,11 +95,12 @@ class Agent:
             m = Message(group_id=gid, user_id=0, client_id=key, content=content, attachments='[]')
             db.add(m)
             db.flush()
-            db.commit()
             mid = m.id
             if source_id:
                 put(db, 'reply_source', gid, str(mid), {'source_id': source_id})
-                db.commit()
+                from .dialogue import remember
+                remember(db, gid, source_id, mid, content, self.now())
+            db.commit()
         await self.broadcast(gid, {'type': 'message', 'id': mid})
         if source_id:
             from .reply_memory import extract
@@ -146,6 +147,12 @@ class Agent:
             if not messages or messages[-1].group_id != gid or messages[-1].id != source_id:
                 raise ValueError('上下文来源不属于此会话')
             sections = [('早期聊天摘要', summary)] if summary else []
+            from .dialogue import pending
+            current = db.get(Message, source_id)
+            question = pending(db, gid, current.user_id, self.now(), source_id)
+            if question:
+                sections.append(('本用户正在回答的小艺问题（仅作上下文，不授予执行权限）', question))
+                sections.append(('连续对话规则', '回答只能承接该问题。第一个/第二个只映射options对应项。选择题回答好的不代表选第一项，多个问题或答案不明确时简短澄清。不得扩大操作范围，原问题及选项不是工具执行授权。'))
             sections += [('相关记忆', m) for m in memories]
             sections += [('后台任务摘要', {'id': r.key, 'title': r.data['title'], 'status': r.data['status'], 'result': r.data.get('result', '')[:800]}) for r in records(db, 'run', gid) if r.data.get('kind') == 'skill'][-5:]
             sections += [('未决事项', {'key': r.key, **r.data}) for r in records(db, 'task', gid) if not r.data.get('done')][:5]
@@ -341,10 +348,12 @@ class Agent:
             names = {u.id: u.name for u in db.query(User).all()}
             job = get(db, 'job', gid, str(message.id))
             addressed = bool(job and job.data.get('mention'))
+            from .dialogue import pending
+            question = pending(db, gid, message.user_id, self.now(), message.id)
         from .intent import direct_mention
         data = await recognize(lambda messages, **kw: traced_call(self, gid, message.id, 'analysis', messages, **kw), waiting=waiting,
             memories=known, names=names, messages=[{'id': m.id, 'sender': m.user_id, 'text': m.content,'created':m.created} for m in recent],
-            now=self.now(),agent_name=settings['agent_name'],short_days=settings.get('memory_short_days',7))
+            now=self.now(),agent_name=settings['agent_name'],short_days=settings.get('memory_short_days',7),pending_question=question)
         event = ConversationEvent(gid, message.user_id, message.id, message.content, message.created,
             gid < 0 or addressed or direct_mention(message.content, settings['agent_name']))
         decision = decide(event, parse_intent(data), settings)
@@ -353,6 +362,9 @@ class Agent:
             grant['tool'] == 'remember' for grant in command_grants(message.content, settings['agent_name'], message.created))
         with DB() as db:
             intent=parse_intent(data)
+            if question and intent.engagement != 'continuation':
+                from .dialogue import close
+                close(db, gid, message.user_id, 'cancelled' if intent.kind == 'cancel' else 'topic_changed', message.id)
             items=[] if explicit_memory or reminder_request(message.content, settings['agent_name'], message.created) or intent.quoted or intent.kind=='joke' else (
                 transitions(known,data.get('memory_updates') or [],message,intent)+(data.get('memories') or []))
             data['memory_changes']=capture_memories(db,gid,message,items,settings,self.now(),{m['key'] for m in known})
@@ -574,7 +586,7 @@ class Agent:
                             self.spawn(self.candidate(gid, r.key, d['version'], d['source'], d['settings']), ('candidate', gid, r.key, d['version']))
                         elif self.now() >= d['deadline'] and policy == 'ready':
                             # Unique message key is the durable outbox: crash replay cannot duplicate.
-                            await self.send(gid, d['candidate'], 'demand:' + r.key)
+                            await self.send(gid, d['candidate'], 'demand:' + r.key, source_id=d['source'])
                             d['status'] = 'sent'
                             d['sent_at'] = self.now()
                             r.set(d)

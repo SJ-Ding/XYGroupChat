@@ -32,9 +32,9 @@ async def test_recognition_receives_assistant_and_validates_confirmation():
         payload = json.loads(messages[-1]['content'])
         assert payload['messages'][-1]['sender'] == 0
         assert payload['latest_message']['text'] == '好的'
-        return {'intent': {'kind':'request','target':'agent','confidence':.95},
+        return {'intent': {'kind':'request','target':'agent','engagement':'continuation','confidence':.95},
                 'confirmed_command':'添加待办：买牛奶'}
 
-    data = await recognize(model, waiting=[], memories=[], names={}, messages=conversation())
+    data = await recognize(model, waiting=[], memories=[], names={}, messages=conversation(), pending_question={'user_id':2,'created':100,'type':'confirmation'})
     assert data['confirmed_command'] == '添加待办：买牛奶'
     assert decide(ConversationEvent(1,2,3,'好的',101), parse_intent(data), {}).action == 'reply'

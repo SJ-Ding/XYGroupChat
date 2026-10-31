@@ -23,11 +23,20 @@ async def evaluate(live=False):
         data = {'intent': case['intent']}
         if model:
             data = await recognize(model.call, waiting=[], memories=[], names={1:'爸爸',2:'妈妈',3:'小宇'},
-                messages=[{'id':i+1,'sender':1,'text':case['text']}])
+                messages=case.get('messages', []) + [{'id':i+1,'sender':1,'text':case['text'],'created':case.get('now',100)}],
+                now=case.get('now',100), pending_question=case.get('pending_question'))
         event = ConversationEvent(1,1,i+1,case['text'],0,direct_mention(case['text'],DEFAULT_AGENT_NAME))
         action = decide(event,parse_intent(data),{'active':True}).action
-        results.append({'id':case['id'],'expected':case['expected'],'actual':action,'passed':action==case['expected']})
+        results.append({'id':case['id'],'expected':case['expected'],'actual':action,'passed':action==case['expected'],
+                        'intent':vars(parse_intent(data)), 'reason':data.get('reason','')})
+    silent = [r for r in results if r['expected'] == 'silent']
+    requests = [r for r in results if r['expected'] != 'silent']
+    false_interventions = sum(r['actual'] != 'silent' for r in silent)
+    missed_responses = sum(r['actual'] == 'silent' for r in requests)
     return {'mode':'live_recognition' if live else 'annotated_policy', 'cases':len(results),
+        'false_interventions':false_interventions, 'missed_responses':missed_responses,
+        'false_intervention_rate':false_interventions / len(silent) if silent else 0,
+        'missed_response_rate':missed_responses / len(requests) if requests else 0,
         'passed':sum(x['passed'] for x in results), 'results':results}
 
 

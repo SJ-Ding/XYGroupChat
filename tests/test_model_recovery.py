@@ -160,7 +160,7 @@ async def test_reply_retry_skips_successful_tools_and_reports_partial_state(monk
     class BrokenReply(FakeModel):
         async def call(self,messages,tools=None,structured=False):
             if structured:
-                return {'memories':[{'content':'妈妈喜欢蓝星茶','confidence':.99}], 'reason':'明确记住'}
+                return {'intent':{'kind':'request','target':'agent','engagement':'addressed','confidence':.99}, 'memories':[{'content':'妈妈喜欢蓝星茶','confidence':.99}], 'reason':'明确记住'}
             raise RuntimeError('模拟回复网络失败')
     calls=[];original=module.execute
     async def track(*args):

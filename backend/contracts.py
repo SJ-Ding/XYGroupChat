@@ -23,6 +23,8 @@ class Intent:
     quoted: bool = False
     scene: str | None = None
     operation: str | None = None
+    engagement: str = 'uncertain'
+    evidence: str = ''
 
 
 @dataclass(frozen=True)

@@ -10,7 +10,11 @@ def confirmed_command(candidate, messages, agent_name):
     if suggestion['sender'] != 0 or user['sender'] != reply['sender'] or reply['sender'] == 0:
         return None
     age = reply.get('created', 0) - suggestion.get('created', 0)
-    if not 0 <= age <= 1800:
+    if not 0 <= age <= 600:
+        return None
+    from .dialogue import question
+    pending = question(suggestion['text'])
+    if not pending or pending['type'] != 'confirmation':
         return None
     if not re.fullmatch(r'\s*(?:好的?|可以|行|嗯|同意|就这样办|帮我执行|执行吧)[呀啊吧呢。！!，,\s]*', reply['text']):
         return None

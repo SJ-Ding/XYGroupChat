@@ -555,10 +555,31 @@ async def on_message(agent, gid, message, *, intent=None, emergency_only=False):
         return True
     if emergency_only:
         return False
+    # Existing check-ins remain valid; ordinary medical content needs a current request.
+    if speaker in ELDERS and CHECKIN_RE.search(text_) and await handle_checkin_text(message, speaker):
+        return True
+    if intent is None:
+        # Narrow current requests can be classified without a model. A medical
+        # keyword or an uploaded document alone is never enough.
+        from .contracts import Intent, ConversationEvent
+        from .participation import decide
+        from .addressing import direct_mention
+        with DB() as db:
+            settings = get(db, 'group', gid, 'settings').data
+        member_address = re.match(r'^\s*(?:妈妈|爸爸|爸|妈|小林|小宇|你们)(?=[，,：:\s]|你|帮|麻烦|请)', text_)
+        quoted_or_hypothetical = re.search(r'他说|她说|妈妈说|爸爸说|假设|开玩笑|比如|例如|要是|如果', text_)
+        direct = direct_mention(message.content, settings['agent_name'])
+        explicit = appointment_operation(text_) or re.search(r'帮我|帮忙|请.*(?:整理|识别|看看|解读)', text_) or (direct and re.search(r'再看|看看|识别|整理|解读', text_))
+        if not member_address and not quoted_or_hypothetical and explicit:
+            intent = Intent(kind='request', target='agent', confidence=1, assistant_helpful=True,
+                            engagement='addressed' if direct else 'implicit_request')
+            event = ConversationEvent(gid, message.user_id, message.id, message.content, message.created, direct)
+            if decide(event, intent, settings).action != 'reply':
+                return False
+    if not intent or intent.quoted or intent.confidence < .85 or intent.target != 'agent' or intent.engagement not in ('addressed', 'implicit_request', 'continuation'):
+        return False
     from . import care_aftercare
     if attachments and await care_aftercare.handle_images(agent, message, speaker, text_, attachments):
-        return True
-    if speaker in ELDERS and CHECKIN_RE.search(text_) and await handle_checkin_text(message, speaker):
         return True
     if await care_aftercare.handle_text_orders(agent, message, speaker, text_):
         return True
@@ -566,7 +587,18 @@ async def on_message(agent, gid, message, *, intent=None, emergency_only=False):
     semantic = bool(intent and intent.kind == 'request' and not intent.quoted and intent.confidence >= .85
         and intent.target == 'agent' and intent.scene == 'family-appointment' and intent.operation in ('query', 'book'))
     if (operation or semantic) and not NEGATION_RE.search(text_):
-        await handle_booking_request(agent, message.user_id, message.content, source=message.id, speaker=speaker,
+        request_text = message.content
+        if intent.engagement == 'continuation':
+            from .dialogue import pending, answer_text
+            with DB() as db:
+                question = pending(db, gid, message.user_id, agent.now(), message.id)
+            if not question:
+                return False
+            answer = answer_text(question, message.content)
+            if answer is None:
+                return False
+            request_text = question.get('request', '') + '\n本用户针对问题“' + question['text'] + '”补充：' + answer
+        await handle_booking_request(agent, message.user_id, request_text, source=message.id, speaker=speaker,
             query_only=(intent.operation if semantic else operation) == 'query')
         return True
     if speaker in ELDERS and SYMPTOM_RE.search(text_) and symptom_of(text_)[1]:
@@ -590,7 +622,7 @@ async def handle_need_hint(agent, message, speaker, text_):
         reply = ('现在具体哪里不舒服，是胀、烧心还是疼，持续多久了？仅凭这句话还不能判断原因。'
                  '如果突然剧烈疼痛、胸痛气短、呕血或黑便，请立即就医，情况紧急拨打120；'
                  '如果持续不缓解或反复出现，也应及时找医生评估。')
-    await say(reply.strip(), f'care:medical-qa:{message.id}')
+    await say(reply.strip(), f'care:medical-qa:{message.id}', source=message.id)
     return True
 
 
@@ -660,7 +692,7 @@ async def handle_booking_request(agent, user_id, text_, *, source=None, speaker=
                     break
         dept = H.department_by_name(dept_name or '')
         if not dept:
-            await say('想查哪个科室的号源？', f'care:query-dept:{source}')
+            await say('想查哪个科室的号源？', f'care:query-dept:{source}', source=source)
             return None
         filters = {'department': dept['name']}
         for key in ('date', 'time', 'hospital_id', 'campus_id', 'doctor_id'):
@@ -702,7 +734,7 @@ async def handle_booking_request(agent, user_id, text_, *, source=None, speaker=
                 await trace.step('memory', '结合上下文认人', f'{display(login)}刚说过“{quote[:20]}”，判断是给{display(login)}挂号')
                 break
     if not patient:
-        await say('这次是给妈妈还是爸爸挂号呀？说一声我就去找号。', f'care:ask:{source or uuid.uuid4().hex}')
+        await say('这次是给妈妈还是爸爸挂号呀？说一声我就去找号。', f'care:ask:{source or uuid.uuid4().hex}', source=source)
         await trace.step('rule', '缺少就诊人，追问一次', '最多追问 1 次，不让家人填表')
         return None
     dept_name = slots['department']
@@ -715,7 +747,7 @@ async def handle_booking_request(agent, user_id, text_, *, source=None, speaker=
         await trace.step('memory', '用医疗档案补全科室', f"{real_name(patient)}：{'、'.join(FAMILY[patient]['conditions'])} → {dept_name}")
     dept = H.department_by_name(dept_name or '')
     if not dept:
-        await say(f'{display(patient)}是哪里不舒服呀？告诉我症状，我来对应科室。', f'care:ask-dept:{source or uuid.uuid4().hex}')
+        await say(f'{display(patient)}是哪里不舒服呀？告诉我症状，我来对应科室。', f'care:ask-dept:{source or uuid.uuid4().hex}', source=source)
         return None
     date = slots['date'] or democlock.shift_date(democlock.today(), 1)
     session = slots['session'] or prefers_session(patient) or 'morning'

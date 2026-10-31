@@ -38,7 +38,7 @@ async def test_two_long_skills_keep_chat_responsive(monkeypatch, tmp_path):
     class Model:
         async def call(self, messages, tools=None, structured=False):
             if structured:
-                return {'new_need': None, 'updates': [], 'memories': [], 'reason': '测试明确请求'}
+                return {'intent': {'kind':'request','target':'agent','engagement':'addressed','confidence':.99}, 'new_need': None, 'updates': [], 'memories': [], 'reason': '测试明确请求'}
             # The latest human source identifies this invocation; older tasks may be history.
             human = [m for m in messages if m['role'] == 'user'][-1]
             source = json.dumps(human, ensure_ascii=False)

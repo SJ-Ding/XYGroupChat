@@ -156,10 +156,10 @@ async def test_rules_reject_negation_and_non_medical_appointments():
 async def test_elder_symptom_uses_qa_without_booking_cards():
     a = make_agent(CareModel())
     for text in ('我吃完晚饭，感觉胃有点不舒服', '胃还是胀', '今天阴天，膝盖又酸又胀'):
-        assert await care.on_message(a, 1, message('mom', text)) is True
+        assert await care.on_message(a, 1, message('mom', text)) is False
     assert not care_cards('need_hint')
     assert not care_cards('hospital_apps')
-    assert any('family-medical-qa' in str(s)
+    assert not any('family-medical-qa' in str(s)
                for turn in care.trace_list() for s in turn['steps'])
 
 
