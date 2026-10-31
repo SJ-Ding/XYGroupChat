@@ -95,6 +95,15 @@
 .cc-legend i { display: inline-block; width: 9px; height: 9px; border-radius: 3px; margin-right: 4px; vertical-align: -1px; }
 .cc-legend em { font-style: normal; color: #a0aca5; margin-left: auto; }
 
+/* 医院选择只有信息和操作两列，不占用号源对比的排名列。 */
+.cc-hospital_apps { gap: 8px; padding: 12px; }
+.cc-hospital_apps .opt-list { gap: 6px; }
+.cc-hospital_apps .opt { grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 8px 10px; }
+.cc-hospital_apps .opt-main { min-width: 0; overflow-wrap: anywhere; }
+.cc-hospital_apps .opt-main p { margin: 2px 0; font-size: 12px; color: var(--c-sub); }
+.cc-hospital_apps .opt-main small { display: block; font-size: 11px; color: var(--c-sub); }
+.cc-hospital_apps .opt > .cc-btn { min-height: 36px; padding: 6px 10px; white-space: nowrap; font-size: 13px; }
+
 /* ---------------- 支付 / 凭证 ---------------- */
 .pay-amount { text-align: center; font-size: 40px; font-weight: 700; color: var(--c-ink); font-variant-numeric: tabular-nums; line-height: 1.1; }
 .pay-amount small { font-size: 20px; margin-right: 2px; }
