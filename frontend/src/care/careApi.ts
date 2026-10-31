@@ -26,6 +26,14 @@ export type DemoState = {
   model: { configured: boolean; name: string };
   amap: boolean;
   browser_headless: boolean;
+  controls: { enabled: boolean; model: boolean; amap: boolean; slow: boolean };
+  branches: { key: string; priority: string; title: string; actor: string; line: string }[];
+  vision: string;
+  model_last: { failed: boolean; at: number } | null;
+  amap_last: { ok: boolean; at: number } | null;
+  distance_sources: string[];
+  browser_pause_ms: number;
+  browser_tasks: { task_id: string; status: string; step: string; error: string | null }[];
 };
 
 export const careAct = (cardId: string, action: string, extra: Record<string, unknown> = {}) =>

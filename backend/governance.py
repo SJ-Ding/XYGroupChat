@@ -9,6 +9,10 @@ async def measured_call(model, gid, *args, **kwargs):
     started = time.monotonic()
     result, error, attempts = None, None, 1
     try:
+        from .demo_control import fault
+        if fault('model', gid):
+            from .model import ModelError
+            raise ModelError('演示故障注入：模型不可用', kind='transport')
         result = await model.call(*args, **kwargs)
         attempts = result.get('_attempts', 1) if isinstance(result, dict) else 1
         return result

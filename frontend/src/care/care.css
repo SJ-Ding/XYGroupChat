@@ -329,3 +329,17 @@
 .elder-quick .mic { display: inline-flex; align-items: center; gap: 6px; background: var(--c-green); color: #fff; }
 .elder-quick .mic.on { background: var(--c-red); animation: pulse 1s infinite; }
 @keyframes pulse { 50% { box-shadow: 0 0 0 8px #c0392b22; } }
+
+/* Opt-in demo controls reuse the existing director panel. */
+.dir-controls { display: grid; gap: 10px; padding: 14px; border: 1px solid var(--c-line); border-radius: 12px; margin: 12px 0; }
+.dir-controls label { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.dir-controls small { color: var(--c-muted); line-height: 1.6; }
+.dir-faults, .dir-branches { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.dir-faults button, .dir-branches button { border: 1px solid var(--c-line); border-radius: 10px; padding: 10px; background: white; text-align: left; min-height: 44px; }
+.dir-faults button[aria-pressed="true"] { background: #fff0e5; border-color: #d38338; }
+.dir-branches button { display: grid; gap: 5px; }
+.dir-branches small { color: #66706b; font-size: 11px; }
+.dir-branches b { font-size: 13px; overflow-wrap: anywhere; }
+.dir-task { display: grid; gap: 4px; padding: 10px; border: 1px solid var(--c-line); border-radius: 10px; margin-bottom: 8px; overflow-wrap: anywhere; }
+.dir-task small { color: #66706b; }
+.dir-controls button:disabled, .dir-branches button:disabled { opacity: .55; cursor: wait; }

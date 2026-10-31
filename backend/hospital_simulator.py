@@ -175,6 +175,7 @@ class _Session:
         self.appointment = None
         self.details = None
         self.step = ''
+        self.step_index = 0
         self.proceed = threading.Event()
         self.stop = threading.Event()
 
@@ -232,7 +233,11 @@ class AppointmentManager:
             os.environ["PLAYWRIGHT_BROWSERS_PATH"] = browsers
 
     @staticmethod
-    def _pause():
+    def _pause(gid=1):
+        from .demo_control import controls
+        state = controls()
+        if gid == 1 and state.get('enabled'):
+            return 3000 if state.get('slow', True) else 1500
         return max(1500, int(os.getenv("HOSPITAL_STEP_PAUSE", "1500")))
 
     def _launch(self, pw):
@@ -300,13 +305,17 @@ class AppointmentManager:
         selector = f'[data-testid="{testid}"]'
         page.wait_for_selector(selector, timeout=10000)
         page.evaluate(_HIGHLIGHT_JS, [selector, label])
+        session.step_index += 1
+        label = f"第 {session.step_index} 步 · {label}"
         session.step = label
         _schedule(_progress(session.gid, session.run_key, label))
-        page.wait_for_timeout(self._pause() if pause is None else pause)
+        page.wait_for_timeout(self._pause(session.gid) if pause is None else pause)
         self._click(page, page.locator(selector).first, session)
 
     def _announce(self, page, label, session):
         page.evaluate(_HIGHLIGHT_JS, [None, label])
+        session.step_index += 1
+        label = f"第 {session.step_index} 步 · {label}"
         session.step = label
         _schedule(_progress(session.gid, session.run_key, label))
 
@@ -319,7 +328,7 @@ class AppointmentManager:
         page.goto(hospital_base(session.context.get("hospital_id")) + "appointment/departments", wait_until="domcontentloaded", timeout=15000)
         page.wait_for_selector('[data-testid^="dept-"]', timeout=15000)
         self._announce(page, "打开模拟医院 · 预约挂号", session)
-        page.wait_for_timeout(self._pause())
+        page.wait_for_timeout(self._pause(session.gid))
         # 目标医院页面每院只有一个院区，院区由当前应用身份确定。
         self._announce(page, f"确认医院应用：{camp['name']}", session)
         self._act(page, f"dept-{dept['id']}", f"选择科室：{dept['name']}", session)
@@ -501,6 +510,9 @@ async def _progress(gid, run_key, label):
             if not run or run.data.get("status") in ("succeeded", "failed", "cancelled"):
                 return
         await update_progress(gid, run_key, "小艺正在操作医院网页：" + label)
+        from .execution_chain import start, finish
+        key = await start(gid, run.data.get('source_id'), run_key, 'browser', label)
+        await finish(gid, key, summary='浏览器当前操作步骤')
     except Exception:  # noqa: BLE001
         pass
 

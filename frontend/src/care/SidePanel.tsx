@@ -178,11 +178,50 @@ function Director({ onTrace }: { onTrace: () => void }) {
           <button onClick={() => run("day", () => api("/api/demo/clock", post({ advance_minutes: 1440 })))} disabled={!!busy}><FastForward size={14} />快进 1 天</button>
         </div>
       </section>
-      <section className="dir-status">
-        <span className={data.model.configured ? "ok" : "off"}><Sparkles size={13} />{data.model.configured ? `大模型 ${data.model.name}` : "大模型未配置 · 规则兜底"}</span>
-        <span className={data.amap ? "ok" : "off"}><MapIcon size={13} />{data.amap ? "高德地图 MCP" : "地图估算"}</span>
-        <span className="ok"><Bot size={13} />{data.browser_headless ? "浏览器后台运行" : "浏览器可视化代办"}</span>
+      <section className="dir-status" aria-label="服务状态" aria-live="polite">
+        <span className={data.controls.model ? "warn" : "off"}><Sparkles size={13} />
+          {data.controls.model ? "模型故障已注入" : data.model.configured ? `对话模型 ${data.model.name} · 已配置` : "对话模型未配置"}
+          {data.model_last && ` · 最近调用${data.model_last.failed ? "失败" : "成功"}`}</span>
+        <span><Sparkles size={13} />识图模型 {data.vision}{data.controls.model ? " · 故障已注入" : " · 识图时验证可用性"}</span>
+        <span className={data.controls.amap ? "warn" : "off"}><MapIcon size={13} />
+          {data.controls.amap ? "地图故障已注入 · 距离估算" : data.amap ? "地图 MCP 已配置" : "地图未配置 · 距离估算"}
+          {data.amap_last && ` · 最近请求${data.amap_last.ok ? "成功" : "失败"}`}</span>
+        {!!data.distance_sources.length && <span>已缓存距离来源：{data.distance_sources.join("、")}</span>}
+        <span><Bot size={13} />{data.browser_headless ? "浏览器后台模式" : "浏览器可视模式"} · 每步 {data.browser_pause_ms / 1000} 秒 · 启动后验证可用性</span>
       </section>
+      <section className="dir-controls" aria-label="演示控制">
+        <label><input type="checkbox" checked={data.controls.enabled} disabled={!!busy}
+          onChange={e => run("mode", () => api("/api/demo/control", post({ enabled: e.target.checked })))} />启用演示控制</label>
+        <small>仅影响演示家庭；退出或重置后清除故障。不改变业务授权。</small>
+        {data.controls.enabled && <>
+          <label><input type="checkbox" checked={data.controls.slow} disabled={!!busy}
+            onChange={e => run("speed", () => api("/api/demo/control", post({ slow: e.target.checked })))} />演示慢速（3 秒／步，正常为 1.5 秒）</label>
+          <div className="dir-faults">
+            <button disabled={!!busy} aria-pressed={data.controls.model}
+              onClick={() => run("fault-model", () => api("/api/demo/control", post({ model: !data.controls.model })))}>
+              {data.controls.model ? "恢复模型" : "注入模型故障"}</button>
+            <button disabled={!!busy} aria-pressed={data.controls.amap}
+              onClick={() => run("fault-amap", () => api("/api/demo/control", post({ amap: !data.controls.amap })))}>
+              {data.controls.amap ? "恢复地图" : "注入地图故障"}</button>
+          </div>
+        </>}
+      </section>
+      {!!data.browser_tasks.length && <section aria-label="浏览器步骤">
+        <h3 className="care-h">浏览器当前步骤</h3>
+        {data.browser_tasks.map(task => <div className="dir-task" key={task.task_id}>
+          <b>{task.step || "等待浏览器启动"}</b><small>{task.status}</small>
+          {task.error && <p role="alert">{task.error}</p>}
+        </div>)}
+      </section>}
+      <h3 className="care-h">演示支线 <small>发送普通消息或注入事件，结果以实际执行为准</small></h3>
+      {!data.controls.enabled && <p className="care-empty small">启用演示控制后可运行支线与故障注入。</p>}
+      {data.controls.enabled && <div className="dir-branches">
+        {data.branches.map(branch => <button key={branch.key} disabled={!!busy} title={branch.line}
+          onClick={() => run("branch:" + branch.key, () => api(`/api/demo/branches/${branch.key}`, post({})))}>
+          <small>{branch.priority} · {({mom: "妈妈", dad: "爸爸", child: "小林", system: "事件"} as Record<string,string>)[branch.actor]}</small>
+          <b>{busy === "branch:" + branch.key ? "执行中…" : branch.title}</b>
+        </button>)}
+      </div>}
       <h3 className="care-h">演示剧本 <small>按顺序点，消息都走真实流程</small></h3>
       <ol className="dir-steps">
         {data.steps.map((s, i) => (

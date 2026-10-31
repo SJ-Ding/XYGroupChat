@@ -122,6 +122,9 @@ def times_of(frequency, timing=None):
 
 async def read_image(agent, path, mime, trace):
     """识图：返回 (结构化结果 或 None, 失败原因, 是否命中缓存)。"""
+    from .demo_control import fault
+    if fault('model'):
+        return None, '演示故障注入：识图模型不可用，请发文字医嘱', None
     raw = path.read_bytes()
     digest = hashlib.sha256(raw).hexdigest()
     cached = _cache_get(digest)

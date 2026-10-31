@@ -304,18 +304,27 @@ def haversine(lng1, lat1, lng2, lat2):
 
 
 async def amap(name, arguments, timeout=15):
+    from .demo_control import fault, record_map
+    if fault('amap'):
+        record_map(False)
+        return None
     if not os.getenv('AMAP_MCP_URL'):
         return None
     from .amap_mcp import amap_mcp
     try:
         result = await asyncio.wait_for(amap_mcp(None, {'action': 'call', 'name': name, 'arguments': arguments}), timeout)
     except Exception:  # noqa: BLE001
+        record_map(False)
         return None
     if not isinstance(result, dict) or 'error' in result:
+        record_map(False)
         return None
     try:
-        return json.loads(result.get('content') or '{}')
+        parsed = json.loads(result.get('content') or '{}')
+        record_map(True)
+        return parsed
     except ValueError:
+        record_map(False)
         return None
 
 
@@ -344,6 +353,11 @@ async def fetch_distances(campus_ids):
 
 
 async def distances(campus_ids, trace):
+    from .demo_control import fault
+    if fault('amap'):
+        result = {c: _estimate(H.campus(c)) for c in campus_ids}
+        await trace.step('tool', '地图故障注入 · 使用距离估算', '未调用高德，不使用缓存冒充实时结果')
+        return result
     cached = all(c in _DIST_CACHE and _DIST_CACHE[c][2] == '高德地图' for c in campus_ids)
     ms = 0 if cached else await fetch_distances(campus_ids)
     for c in campus_ids:
@@ -1358,7 +1372,8 @@ def demo_state():
     with DB() as db:
         state = get(db, 'demo', GID, 'state')
         done = (state.data.get('steps') if state else {}) or {}
-    return {'clock': {'ts': democlock.now(), 'label': democlock.label(), 'day': day_index(), 'offset': democlock.offset()},
+    from .demo_control import status
+    return {**status(), 'clock': {'ts': democlock.now(), 'label': democlock.label(), 'day': day_index(), 'offset': democlock.offset()},
             'steps': [{**{k: v for k, v in s.items() if k != 'say'}, 'done': s['key'] in done,
                        'line': s.get('say', (None, None))[1]} for s in DEMO_STEPS],
             'model': {'configured': bool(os.getenv('DEEPSEEK_API_KEY')), 'name': model_name()},
@@ -1597,6 +1612,8 @@ class SayBody(BaseModel):
 
 def install_routes(app, current, access, agent):
     set_agent(agent)
+    from .demo_control import install_routes as install_demo_controls
+    install_demo_controls(app, current, access, agent)
 
     @app.get('/api/care/dashboard')
     def care_dashboard(user=Depends(current)):
