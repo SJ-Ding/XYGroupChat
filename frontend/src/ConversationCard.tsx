@@ -211,7 +211,7 @@ export function ConversationCard({
                   (
                     {
                       submit: "提交信息",
-                      confirm: booking ? "确认并继续（授权提交）" : "确认并继续",
+                      confirm: booking ? "确认并继续" : "确认并继续",
                       cancel: "取消任务",
                       retry: "重试",
                     } as Record<string, string>

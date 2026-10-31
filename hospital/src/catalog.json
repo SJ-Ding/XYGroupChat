@@ -2,19 +2,23 @@
  "campuses": [
   {
    "id": "c-main",
-   "name": "总院",
-   "address": "鼓楼区健康路 1 号（演示地址）",
-   "lng": 118.7799,
-   "lat": 32.0612,
-   "level": "三级甲等"
+   "name": "南京医科大学第二附属医院(萨家湾院区)",
+   "address": "挹江门街道中山北路309号",
+   "lng": 118.756361,
+   "lat": 32.0835,
+   "level": "三级甲等",
+   "hospitalId": "amap-B001909Z1X",
+   "source": "高德 MCP"
   },
   {
    "id": "c-east",
-   "name": "东院区",
-   "address": "玄武区东院路 88 号（演示地址）",
-   "lng": 118.7745,
-   "lat": 32.0789,
-   "level": "三级甲等"
+   "name": "南京市第二医院(钟阜院区)",
+   "address": "钟阜路1-1号",
+   "lng": 118.768137,
+   "lat": 32.088873,
+   "level": "三级甲等",
+   "hospitalId": "amap-B001905128",
+   "source": "高德 MCP"
   }
  ],
  "departments": [
@@ -1010,8 +1014,37 @@
   }
  ],
  "hospital": {
-  "name": "市第一人民医院",
-  "approvalThreshold": 50,
+  "name": "附近两家医院 · 模拟挂号",
   "lockMinutes": 15
- }
+ },
+ "hospitals": [
+  {
+   "id": "amap-B001909Z1X",
+   "poiId": "B001909Z1X",
+   "name": "南京医科大学第二附属医院(萨家湾院区)",
+   "address": "挹江门街道中山北路309号",
+   "lng": 118.756361,
+   "lat": 32.0835,
+   "level": "三级甲等",
+   "distanceKm": 0.76,
+   "source": "高德 MCP",
+   "queriedAt": "2026-10-31T02:47:22.058233+00:00",
+   "locationPrecision": "道路",
+   "originAddress": "南京市鼓楼区中山北路"
+  },
+  {
+   "id": "amap-B001905128",
+   "poiId": "B001905128",
+   "name": "南京市第二医院(钟阜院区)",
+   "address": "钟阜路1-1号",
+   "lng": 118.768137,
+   "lat": 32.088873,
+   "level": "三级甲等",
+   "distanceKm": 1.32,
+   "source": "高德 MCP",
+   "queriedAt": "2026-10-31T02:47:22.336923+00:00",
+   "locationPrecision": "道路",
+   "originAddress": "南京市鼓楼区中山北路"
+  }
+ ]
 }

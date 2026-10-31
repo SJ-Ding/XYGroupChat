@@ -397,8 +397,8 @@ async def nearest_er(trace):
         return er
     camp = H.campus('c-main')
     km = _DIST_CACHE.get('c-main', _estimate(camp))[0]
-    await trace.step('tool', '附近急诊（本地兜底）', f"市第一人民医院总院急诊科 约{km:.1f}km")
-    return {'name': '市第一人民医院总院 · 急诊科', 'address': camp['address'], 'distance_km': round(km, 1), 'source': '演示数据'}
+    await trace.step('tool', '附近急诊（本地兜底）', f"{camp['name']} 约{km:.1f}km（急诊信息未核实）")
+    return {'name': camp['name'] + '（急诊信息未核实）', 'address': camp['address'], 'distance_km': round(km, 1), 'source': '演示数据'}
 
 
 async def warmup():
@@ -440,7 +440,7 @@ def option_from_slot(s, dist, visits, fam_doc, rank_note=''):
             'date_label': democlock.date_label(s['date']), 'session': s['session'], 'time': s['startTime'],
             'fee': s['price'], 'remaining': s['remaining'], 'distance_km': round(km, 1), 'eta_min': minutes,
             'distance_source': source, 'visits': visits, 'score': score, 'score_parts': parts, 'reasons': reasons,
-            'note': rank_note, 'needs_approval': s['price'] > H.APPROVAL_THRESHOLD}
+            'note': rank_note, 'hospital_id': camp.get('hospitalId'), 'needs_approval': False}
 
 
 def pick_slot(avail, fam_doc):
@@ -484,7 +484,7 @@ async def build_options(login, dept_id, date, session, trace):
     # 比推荐项更近却没号的院区作为“对比项”，说明为什么没选它
     best_km = available[0]['distance_km'] if available else 99
     compare = [b for b in blocked if b['distance_km'] <= best_km + 0.01] or blocked[:1]
-    await trace.step('tool', '查询号源 · 市第一人民医院预约平台', f"{dept['name']} {democlock.date_label(date)}{session_label(session)}："
+    await trace.step('tool', '查询号源 · 两院模拟挂号平台', f"{dept['name']} {democlock.date_label(date)}{session_label(session)}："
                      f"扫描 {scanned} 个号源，可约 {len(available)} 个方案，约满 {len(blocked)} 个院区", round((time.monotonic() - started) * 1000))
     if available:
         top = available[0]
@@ -512,7 +512,7 @@ async def on_message(agent, gid, message):
     if speaker in ELDERS and CHECKIN_RE.search(text_) and await handle_checkin_text(message, speaker):
         return True
     medical = re.search(r'挂.{0,10}号', text_) or re.search(r'医院|医生|门诊|科|复诊|专家|看病|号源', text_)
-    if BOOKING_RE.search(text_) and medical and not NEGATION_RE.search(text_):
+    if (BOOKING_RE.search(text_) or re.search(r'查.*号源|科.*有号吗|查询.*科', text_)) and medical and not NEGATION_RE.search(text_):
         await handle_booking_request(agent, message.user_id, text_, source=message.id, speaker=speaker)
         return True
     if speaker in ELDERS and SYMPTOM_RE.search(text_) and symptom_of(text_)[1]:
@@ -581,7 +581,7 @@ async def handle_booking_request(agent, user_id, text_, *, source=None, speaker=
     await trace.step('rule', '意图识别：挂号请求', f'“{text_[:40]}”' if text_ else '来自「小艺建议」卡')
     from .skill_library import load_instructions
     skill = load_instructions('family-appointment')
-    await trace.step('skill', '加载 Skill · family-appointment', '门诊预约方法：症状→科室对照、补全四要素、50 元授权规则')
+    await trace.step('skill', '加载 Skill · family-appointment', '门诊预约方法：症状→科室对照、补全四要素、自动选号、支付前确认')
     slots = {**rule_slots(text_ or '', speaker), **{k: v for k, v in (preset or {}).items() if v}}
     await trace.step('rule', '规则抽取槽位', '，'.join(f'{k}={v}' for k, v in slots.items() if v) or '未抽到明确槽位')
     reply = None
@@ -604,6 +604,25 @@ async def handle_booking_request(agent, user_id, text_, *, source=None, speaker=
             await trace.step('llm', f'大模型理解请求 · {model_name()}', '，'.join(f'{k}={result.get(k)}' for k in ('patient', 'department', 'date', 'session') if result.get(k)))
         else:
             await trace.step('rule', '大模型理解（跳过）', err)
+    query_only = bool(re.search(r'查询|查一下|看看|有哪些|有号吗|号源', text_ or '') and not re.search(r'帮.*挂|预约|办理|挂个|挂一个|并.*挂|然后.*挂|直接.*挂', text_ or ''))
+    if query_only and not slots['patient']:
+        dept = H.department_by_name(slots.get('department') or '')
+        if not dept:
+            await say('想查哪个科室的号源？', f'care:query-dept:{source}')
+            return None
+        dates = [slots['date']] if slots.get('date') else H.window()
+        available = [s for s in H.generate_slots(dates) if s['departmentId'] == dept['id'] and s['status'] == 'available'
+            and (not slots.get('session') or s['session'] == slots['session'])]
+        lines = []
+        for campus in H.catalog()['campuses']:
+            choices = [s for s in available if s['campusId'] == campus['id']]
+            if choices:
+                first = choices[0]
+                lines.append(f"{campus['name']}：{first['date']} {first['startTime']}，{H.doctor(first['doctorId'])['name']}，¥{first['price']}，余{first['remaining']}号")
+            else:
+                lines.append(f"{campus['name']}：暂无符合条件的号源")
+        await say(dept['name'] + '模拟号源：\n' + '\n'.join(lines) + '。需要办理时告诉我就诊人。', f'care:query:{source}')
+        return None
     patient = slots['patient']
     if not patient:
         word, dept_name, quote = None, None, None
@@ -637,27 +656,27 @@ async def handle_booking_request(agent, user_id, text_, *, source=None, speaker=
     if profile:
         await trace.step('tool', f'medical_profile({real_name(patient)})', '；'.join(p['content'] for p in profile[:3]))
     options, compare, fam_doc = await build_options(patient, dept['id'], date, session, trace)
+    if date not in H.window():
+        await say('未来七天没有符合条件的号源，请换个时间。', f'care:no-slots:{source}')
+        return None
     if not options:
         await say(f'{democlock.date_label(date)}{session_label(session)}{dept["name"]}都约满了，我再看看后一天的号。', f'care:full:{source}:{date}')
         return await handle_booking_request(agent, user_id, '', source=source, speaker=speaker, trace=trace,
                                             preset={'patient': patient, 'department': dept['name'], 'date': democlock.shift_date(date, 1), 'session': session})
     top = options[0]
-    reply = reply or (f"好，{display(patient)}{'膝盖旧伤' if dept['id'] == 'd-guke' and patient == 'mom' else ''}的事我来办。"
-                      f"按{'上次看的' + fam_doc['name'] + '医生' if fam_doc else '距离和医生职称'}帮你找了{democlock.date_label(date)}{session_label(session)}的号：")
-    key = f"options:{source or uuid.uuid4().hex}:{date}:{session}"
-    await say(reply, 'care:reply:' + key)
-    await post_card(key, 'hospital_options', f"{dept['name']} · {democlock.date_label(date)}{session_label(session)}号源", {
-        'patient': patient, 'patient_name': display(patient), 'real_name': real_name(patient), 'patient_id': FAMILY[patient]['patient_id'],
-        'department': dept['name'], 'department_id': dept['id'], 'date': date, 'date_label': democlock.date_label(date),
-        'session': session, 'options': options, 'compare': compare, 'weights': WEIGHTS,
-        'familiar_doctor': fam_doc['name'] if fam_doc else None, 'requested_by': speaker,
-        'approval_threshold': H.APPROVAL_THRESHOLD}, ['choose', 'next_day'])
-    await trace.step('card', '推送号源对比卡', f"推荐①{top['campus']}·{top['doctor']} {top['date_label']}{top['time']} ¥{top['fee']}，等家人选择")
-    return key
+    meta = {'patient': patient, 'real_name': real_name(patient), 'patient_id': FAMILY[patient]['patient_id'], 'department': dept['name']}
+    if query_only:
+        key = f"options:{source}:{date}:{session}"
+        await post_card(key, 'hospital_options', f"{dept['name']} · 模拟号源", {
+            **meta, 'patient_name': display(patient), 'department_id': dept['id'], 'date': date,
+            'date_label': democlock.date_label(date), 'session': session, 'options': options,
+            'compare': compare, 'weights': WEIGHTS, 'requested_by': speaker}, ['choose', 'next_day'])
+        return key
+    return await start_booking(agent, user_id, top, meta, origin_key=f"auto:{source}:{date}:{session}", trace=trace)
 
 
 async def start_booking(agent, user_id, option, meta, *, origin_key, trace=None):
-    """家人选定号源后：启动可观看的浏览器任务，走到核对页停下等确认。"""
+    """启动可观看的浏览器任务，自动锁号后交由本人支付。"""
     from .skills import SkillContext, execute
     trace = trace or Trace('浏览器代办挂号', None)
     patient_name = meta['real_name']
@@ -666,10 +685,10 @@ async def start_booking(agent, user_id, option, meta, *, origin_key, trace=None)
             'slot_id': option['slot_id'], 'campus_id': option['campus_id'], 'doctor_id': option['doctor_id'],
             'date': option['date'], 'patient_id': meta['patient_id']}
     ctx = SkillContext(GID, user_id, f'care:{origin_key}', 0, False, grants=[], selected={'hospital_simulator'}, now=democlock.now())
-    await say(f"好，我这就去市一院官网给{display(meta['patient'])}挂{option['doctor']}医生{option['date_label']}{option['time']}的号。"
-              f"旁边浏览器会自动填写，提交前会请你确认{'（挂号费超过 50 元需要你授权）' if option.get('needs_approval') else ''}。",
+    await say(f"好，我这就去模拟医院给{display(meta['patient'])}挂{option['doctor']}医生{option['date_label']}{option['time']}的号。"
+              "浏览器会自动填写并锁号，支付前请你本人确认。",
               f'care:booking:{origin_key}:{option["slot_id"]}')
-    await trace.step('tool', 'hospital_simulator · book（浏览器自动化）', f"打开市一院官网：{option['campus']} → {meta['department']} → {option['doctor']} → {option['time']} → 就诊人{patient_name}")
+    await trace.step('tool', 'hospital_simulator · book（浏览器自动化）', f"打开模拟挂号平台：{option['campus']} → {meta['department']} → {option['doctor']} → {option['time']} → 就诊人{patient_name}")
     result = await execute('hospital_simulator', args, ctx)
     if 'error' in result:
         await say('打开医院网站出了点问题：' + result['error'], f'care:book-error:{origin_key}')
@@ -680,7 +699,7 @@ async def start_booking(agent, user_id, option, meta, *, origin_key, trace=None)
         if run:
             run.set({**run.data, 'care': True, 'care_meta': {**meta, 'option': option, 'origin': origin_key}})
             db.commit()
-    await trace.step('rule', '人在回路：提交前暂停', '浏览器停在核对页 → 发确认卡；模型没有提交与支付能力')
+    await trace.step('rule', '自动锁号，支付前确认', '浏览器填写并锁号 → 发支付卡；付款由本人完成')
     return result['task_id']
 
 
@@ -694,11 +713,11 @@ async def on_booked(gid, run_key, appointment):
     if not appt:
         return
     trace = Trace('锁号成功 → 支付', None)
-    await trace.step('tool', '浏览器提交预约', f"市一院返回预约编号 {appt['id']}，号源已扣减，锁号 15 分钟")
+    await trace.step('tool', '浏览器提交预约', f"模拟医院返回预约编号 {appt['id']}，号源已扣减，锁号 15 分钟")
     who = next((k for k, v in FAMILY.items() if v['patient_id'] == appt['patientId']), 'mom')
     await say(f"锁号成功！{display(who)}的号已经占住了，15 分钟内付款就行 👇", f"care:locked:{appt['id']}")
     await post_card(f"pay:{appt['id']}", 'payment', '挂号费待支付', {
-        'appt_id': appt['id'], 'patient': who, 'patient_name': appt['patientName'], 'campus': appt['campusName'],
+        'hospital_id': appt.get('hospitalId', 'legacy-hospital'), 'appt_id': appt['id'], 'patient': who, 'patient_name': appt['patientName'], 'campus': appt['campusName'],
         'department': appt['deptName'], 'doctor': appt['doctorName'], 'title': appt['doctorTitle'], 'date': appt['date'],
         'date_label': democlock.date_label(appt['date']), 'time': appt['startTime'], 'fee': appt['fee'],
         'expires_at': appt['lock_expires'], 'pay_url': f"/hospital/pay/{appt['id']}?t={H.pay_token(appt['id'])}",
@@ -715,20 +734,20 @@ async def on_paid(appt):
     visit_at = democlock.at(appt['date'], appt['startTime'])
     with DB() as db:
         put(db, 'reminder', GID, f"visit:{appt['id']}", {
-            'content': f"{display(who)}今天 {appt['startTime']} 在市一院{appt['campusName']}{appt['deptName']}看{appt['doctorName']}医生，记得带医保卡和以前的病历。",
+            'content': f"{display(who)}今天 {appt['startTime']} 在{appt['campusName']}{appt['deptName']}看{appt['doctorName']}医生，记得带医保卡和以前的病历。",
             'at': visit_at - 3600, 'sent': False, 'user_id': 0, 'channel': 'group', 'status': 'active', 'version': 1,
             'category': 'medical_visit', 'grace_seconds': 1800})
-        save_memory(db, GID, f"{real_name(who)}已预约{democlock.date_label(appt['date'])}{appt['startTime']}市一院{appt['campusName']}{appt['deptName']}{appt['doctorName']}医生（已支付）",
+        save_memory(db, GID, f"{real_name(who)}已预约{democlock.date_label(appt['date'])}{appt['startTime']}{appt['campusName']}{appt['deptName']}{appt['doctorName']}医生（已支付）",
                     [], [display(who)], key=f"visit-{appt['id']}", manual=True, explicit=True, domain='medical',
-                    profile={'record_type': 'hospital', 'hospital': '市第一人民医院', 'campus': appt['campusName'], 'department': appt['deptName'],
+                    profile={'record_type': 'hospital', 'hospital': appt.get('hospitalName', appt['campusName']), 'hospital_id': appt.get('hospitalId', 'legacy-hospital'), 'campus': appt['campusName'], 'department': appt['deptName'],
                              'doctor': appt['doctorName'], 'doctor_id': appt['doctorId'], 'visit_date': visit_at, 'member_id': ids().get(who)},
                     metadata={'subject_ids': [ids().get(who)], 'category': 'medical'}, now=democlock.now())
         db.commit()
     await trace.step('memory', '写入就诊档案 + 就诊前 1 小时提醒', f"{real_name(who)} {appt['date']} {appt['startTime']} {appt['doctorName']}")
-    await say(f"{display(who)}的号挂好了 🎉 {democlock.date_label(appt['date'])} {appt['startTime']}，市一院{appt['campusName']}{appt['deptName']}{appt['doctorName']}医生。"
+    await say(f"{display(who)}的号挂好了 🎉 {democlock.date_label(appt['date'])} {appt['startTime']}，{appt['campusName']}{appt['deptName']}{appt['doctorName']}医生。"
               f"已加入日历，就诊前 1 小时我会提醒；看完病我也会继续盯着复诊和用药。", f"care:paid:{appt['id']}")
     await post_card(f"receipt:{appt['id']}", 'receipt', '挂号凭证', {
-        'appt_id': appt['id'], 'patient_name': appt['patientName'], 'campus': appt['campusName'], 'department': appt['deptName'],
+        'hospital_id': appt.get('hospitalId', 'legacy-hospital'), 'appt_id': appt['id'], 'patient_name': appt['patientName'], 'campus': appt['campusName'], 'department': appt['deptName'],
         'doctor': appt['doctorName'], 'title': appt['doctorTitle'], 'date': appt['date'], 'date_label': democlock.date_label(appt['date']),
         'time': appt['startTime'], 'fee': appt['fee'], 'paid_at': appt.get('paid_at'), 'address': H.campus(appt['campusId'])['address'],
         'calendar_url': f"/api/care/calendar/{appt['id']}.ics", 'reminder': '就诊前 1 小时提醒'}, ['calendar'], status='done')
@@ -792,7 +811,7 @@ async def complete_visit(agent):
         db.commit()
     emr = appt['emr']
     who = next((k for k, v in FAMILY.items() if v['patient_id'] == appt['patientId']), 'mom')
-    await trace.step('tool', '同步电子病历 · 市一院预约平台', f"{emr['department']} {emr['doctor']}：{emr['diagnosis']}")
+    await trace.step('tool', '同步电子病历 · 模拟挂号平台', f"{emr['department']} {emr['doctor']}：{emr['diagnosis']}")
     result, err = await llm_json(agent, 'care_plan', PLAN_SYSTEM, {'emr': {k: emr[k] for k in ('department', 'doctor', 'diagnosis', 'advice')}})
     plan, by_llm = None, False
     if result and isinstance(result.get('items'), list):
@@ -821,8 +840,8 @@ async def complete_visit(agent):
         rows.append(row)
     await say(f"{display(who)}看完了。根据{emr['doctor']}医生的医嘱，我整理了一份两周守护计划，你看看合不合适：", f"care:visit:{appt['id']}")
     await post_card(f"plan:{appt['id']}", 'care_plan', '就诊后守护计划', {
-        'appt_id': appt['id'], 'patient': who, 'patient_name': display(who), 'real_name': real_name(who),
-        'source': f"市第一人民医院 · {emr['department']} · {emr['doctor']} · 电子病历", 'diagnosis': plan['diagnosis'],
+        'hospital_id': appt.get('hospitalId', 'legacy-hospital'), 'appt_id': appt['id'], 'patient': who, 'patient_name': display(who), 'real_name': real_name(who),
+        'source': f"{appt['campusName']} · {emr['department']} · {emr['doctor']} · 电子病历", 'diagnosis': plan['diagnosis'],
         'summary': plan.get('summary'), 'advice': emr['advice'], 'items': rows, 'follow_date': follow_date,
         'doctor_id': appt['doctorId'], 'campus_id': appt['campusId'], 'dept_id': appt['deptId'],
         'extracted_by': 'llm' if by_llm else 'rule'},
@@ -1362,7 +1381,7 @@ async def act_on_card(agent, card_id, action, payload, user_id):
     elif ctype == 'care_plan':
         if action == 'dismiss':
             return await update_card(card_id, status='done', data={'result': '暂不启用'}, actions=[])
-        enabled = set((payload or {}).get('enabled') or [r['key'] for r in d['items']])
+        enabled = set((payload or {}).get('enabled') if (payload or {}).get('enabled') is not None else [r['key'] for r in d['items']])
         rows = [{**r, 'enabled': r['key'] in enabled} for r in d['items']]
         await update_card(card_id, data={'items': rows})
         created = confirm_plan_items(card_data(card_id))
@@ -1435,7 +1454,7 @@ def calendar_ics(appt_id):
         'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//xiaoyi//family//CN', 'BEGIN:VEVENT', f'UID:{appt_id}@xiaoyi',
         f'DTSTART;TZID=Asia/Shanghai:{fmt(start)}', f'DTEND;TZID=Asia/Shanghai:{fmt(end)}',
         f"SUMMARY:{appt['patientName']} · {appt['deptName']} {appt['doctorName']}",
-        f"LOCATION:市第一人民医院{appt['campusName']}（{H.campus(appt['campusId'])['address']}）",
+        f"LOCATION:{appt['campusName']}（{H.campus(appt['campusId'])['address']}）",
         f"DESCRIPTION:预约编号 {appt_id}，请提前 15 分钟到院取号。",
         'BEGIN:VALARM', 'TRIGGER:-PT60M', 'ACTION:DISPLAY', 'DESCRIPTION:就诊提醒', 'END:VALARM',
         'END:VEVENT', 'END:VCALENDAR', ''])
@@ -1475,6 +1494,13 @@ def install_routes(app, current, access, agent):
     @app.post('/api/care/cards/{card_id}/act')
     async def care_act(card_id: str, body: ActBody, user=Depends(current)):
         access(GID, user)
+        with DB() as db:
+            record = get(db, 'card', GID, card_id)
+            if record and record.data.get('care', {}).get('data', {}).get('prognosis'):
+                from .prognosis import activate
+                result = activate(db, GID, record.data, body.action, body.enabled, user['id'])
+                db.commit()
+                return result
         payload = {'option': body.option, 'enabled': body.enabled}
         return await act_on_card(agent, card_id, body.action, payload, user['id'])
 

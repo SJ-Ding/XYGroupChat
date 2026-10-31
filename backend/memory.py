@@ -82,7 +82,7 @@ def save_memory(db, gid, content, sources=None, subjects=None, key=None, manual=
         return old
     if old:
         put(db, 'revision', gid, str(uuid.uuid4()), {'memory_key': old.key, 'previous': old.data, 'at': time.time()})
-    extra = {k:v for k,v in (metadata or {}).items() if k in ('category','topic','topic_key','subject_ids','tentative','eligible_long_term','observations','last_observed_at','first_observed_at','last_reviewed_at','promoted_at','archived_at','status','expiry_from_time')}
+    extra = {k:v for k,v in (metadata or {}).items() if k in ('source_type','reply_id','attachment_ids','category','topic','topic_key','subject_ids','tentative','eligible_long_term','observations','last_observed_at','first_observed_at','last_reviewed_at','promoted_at','archived_at','status','expiry_from_time')}
     # Determine domain: explicit > inherit from old > default 'general'.
     # 'general' covers daily life; vertical domains (medical, ...) carry profiles.
     resolved_domain = domain or (old.data.get('domain') if old else None) or 'general'

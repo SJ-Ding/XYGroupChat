@@ -85,9 +85,9 @@ async def test_book_creates_run_and_card():
         task_id = result["task_id"]
         with DB() as db:
             run = get(db, "run", 1, task_id)
-            assert run.data["status"] == "waiting_authorization"
+            assert run.data["status"] == "running"
             assert run.data["steps"][0]["tool"] == "hospital_simulator"
-            assert run.data["steps"][0]["arguments"] == {"action": "approve", "task_id": task_id}
+            assert run.data["steps"][0]["arguments"] == {"action": "status", "task_id": task_id}
             assert get(db, "card", 1, "run:" + task_id) is not None
 
         # 同一条指令幂等复用，不重复启动浏览器

@@ -6,6 +6,7 @@ import {
   Loader2, Footprints, BadgeCheck,
 } from "lucide-react";
 import type { ChatCard } from "../types";
+import { api, post } from "../api";
 import { careAct } from "./careApi";
 
 type D = Record<string, any>;
@@ -18,7 +19,9 @@ function useAct(card: ChatCard, onUpdate: () => Promise<void>) {
     setBusy(action + (extra.option ? ":" + extra.option : ""));
     setError("");
     try {
-      await careAct(card.id, action, extra);
+      if (card.care?.data.prognosis) {
+        await api(`/api/groups/${card.care.data.gid}/prognosis/${encodeURIComponent(card.id)}/act`, post({ action, ...extra }));
+      } else await careAct(card.id, action, extra);
       await onUpdate();
     } catch (e) {
       setError((e as Error).message);
@@ -119,7 +122,6 @@ export function CareCard({ card, onUpdate }: { card: ChatCard; onUpdate: () => P
                 <div className="opt-slot">
                   <div className="opt-time">{o.time}</div>
                   <div className="opt-fee">¥{o.fee}</div>
-                  {o.needs_approval && <small className="opt-auth"><ShieldCheck size={11} />需家人授权</small>}
                   {can("choose") && (
                     <Btn onClick={() => act("choose", { option: o.id })} busy={busy === "choose:" + o.id}>选这个</Btn>
                   )}
@@ -181,7 +183,7 @@ export function CareCard({ card, onUpdate }: { card: ChatCard; onUpdate: () => P
           <div className="ticket-top"><small>预约编号</small><b>{d.appt_id}</b></div>
           <dl className="cc-grid">
             <dt>就诊人</dt><dd>{d.patient_name}</dd>
-            <dt>医院</dt><dd>市一院 {d.campus}</dd>
+            <dt>医院</dt><dd>{d.campus}</dd>
             <dt>科室 / 医生</dt><dd>{d.department} · {d.doctor}</dd>
             <dt>就诊时间</dt><dd><b>{d.date_label} {d.time}</b></dd>
             <dt>地址</dt><dd>{d.address}</dd>
@@ -201,7 +203,7 @@ export function CareCard({ card, onUpdate }: { card: ChatCard; onUpdate: () => P
     const labels: Record<string, string> = { medication: "用药", rehab: "康复", followup: "复诊" };
     body = (
       <>
-        <Head icon={<ShieldCheck size={17} />} tone="green" title="就诊后守护计划" chip="14 天" chipTone="green" />
+        <Head icon={<ShieldCheck size={17} />} tone="green" title="就诊后守护计划" chip="按医嘱" chipTone="green" />
         <div className="cc-sub">来源：{d.source}</div>
         <div className="cc-diagnosis"><small>诊断</small>{d.diagnosis}</div>
         <div className="plan-list">
@@ -228,7 +230,7 @@ export function CareCard({ card, onUpdate }: { card: ChatCard; onUpdate: () => P
             <Btn onClick={() => act("confirm_plan", { enabled: Object.keys(enabled).filter((k) => enabled[k]) })} busy={busy === "confirm_plan"}>确认计划</Btn>
             <Btn kind="ghost" onClick={() => act("dismiss")} busy={busy === "dismiss"}>暂不启用</Btn>
           </div>
-        ) : <Result text={d.result} />}
+        ) : <><Result text={d.result} />{d.prognosis && actions.includes("cancel_plan") && <div className="cc-actions"><Btn kind="ghost" busy={busy === "cancel_plan"} onClick={() => act("cancel_plan")}>取消提醒</Btn></div>}</>}
       </>
     );
   }
@@ -298,7 +300,7 @@ export function CareCard({ card, onUpdate }: { card: ChatCard; onUpdate: () => P
         <Head icon={<BellRing size={17} />} tone="blue" title="复诊提醒 · 就诊简报" chip="明天复诊" chipTone="blue" />
         {o && (
           <dl className="cc-grid four">
-            <dt>就诊人</dt><dd>{d.real_name}</dd><dt>医院</dt><dd>市一院{o.campus}</dd>
+            <dt>就诊人</dt><dd>{d.real_name}</dd><dt>医院</dt><dd>{o.campus}</dd>
             <dt>医生</dt><dd>{o.doctor}（上次）</dd><dt>时间</dt><dd><b>{o.date_label} {o.time}</b></dd>
           </dl>
         )}

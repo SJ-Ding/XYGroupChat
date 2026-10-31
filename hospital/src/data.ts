@@ -42,6 +42,8 @@ export interface AppointmentSlot {
   id: string;
   doctorId: string;
   departmentId: string;
+  hospitalId?: string;
+  hospitalName?: string;
   campusId: string;
   date: string; // YYYY-MM-DD
   startTime: string; // HH:MM
@@ -145,7 +147,7 @@ export const CAMPUSES: Campus[] = catalog.campuses;
 export const DEPARTMENTS: Dept[] = catalog.departments;
 export const PATIENTS: Patient[] = catalog.patients;
 export const DOCTORS: Doctor[] = catalog.doctors;
-export const APPROVAL_THRESHOLD: number = catalog.hospital.approvalThreshold;
+
 
 // ============================================================
 // 后端状态：号源 / 预约（启动时加载，提交后局部更新）
@@ -210,7 +212,7 @@ export function matchDeptBySymptom(symptom: string): Dept | null {
 }
 
 // ============================================================
-// 预约 / 取消 / 支付 / 病历（后端校验号源、授权阈值与幂等）
+// 预约 / 取消 / 支付 / 病历（后端校验号源、幂等）
 // ============================================================
 export interface SubmitResult { ok: boolean; error?: string; appointment?: Appointment }
 

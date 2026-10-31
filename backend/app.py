@@ -248,6 +248,41 @@ def memories(gid: int, q: str = '', domain: Optional[str] = None, user=Depends(c
             mems = [m for m in mems if m.get('domain', 'general') == domain]
         return mems
 
+class PrognosisAction(BaseModel):
+    action: str
+    enabled: list[str] | None = None
+
+@app.post('/api/groups/{gid}/prognosis/{key}/act')
+async def prognosis_action(gid: int, key: str, body: PrognosisAction, user=Depends(current)):
+    if gid < 0:
+        if gid != -user['id']:
+            raise HTTPException(403, '无此会话权限')
+    else:
+        access(gid, user)
+    from .prognosis import activate
+    with DB() as db:
+        r = get(db, 'card', gid, key)
+        if not r or not r.data.get('care', {}).get('data', {}).get('prognosis'):
+            raise HTTPException(404, '计划不存在')
+        result = activate(db, gid, r.data, body.action, body.enabled, user['id'])
+        db.commit()
+    await broadcast(gid, {'type': 'refresh'})
+    return result
+
+class BackfillBody(BaseModel):
+    preview: bool = True
+    limit: int = Field(default=100, ge=1, le=500)
+
+@app.post('/api/groups/{gid}/memories/backfill')
+async def backfill_memories(gid: int, body: BackfillBody, user=Depends(current)):
+    if gid < 0:
+        if gid != -user['id']:
+            raise HTTPException(403, '无此会话权限')
+    else:
+        access(gid, user)
+    from .reply_memory import backfill
+    return {'preview': body.preview, 'items': await backfill(agent, gid, body.limit, body.preview)}
+
 @app.post('/api/groups/{gid}/memories')
 async def add_memory(gid: int, body: MemoryBody, user=Depends(current)):
     access(gid, user)

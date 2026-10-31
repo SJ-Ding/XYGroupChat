@@ -81,45 +81,49 @@ def test_slots_are_deterministic_and_story_slots_pinned():
     assert H.slot(familiar[0]['id'])['id'] == familiar[0]['id']
 
 
-def test_booking_needs_family_authorization_and_decrements_slot():
+def test_booking_without_child_authorization_decrements_slot():
     tomorrow = democlock.shift_date(democlock.today(), 1)
     slot = next(s for s in H.find_slots('d-guke', tomorrow, 'morning', 'c-main', 'doc-g1') if s['startTime'] == '08:30')
     with DB() as db:
-        with pytest.raises(ValueError, match='授权'):
-            H.create_appointment(db, slot['id'], 'p-001')
-        appt = H.create_appointment(db, slot['id'], 'p-001', 'task-1', 'tk-ok')
-        again = H.create_appointment(db, slot['id'], 'p-001', 'task-1', 'tk-ok')
+        appt = H.create_appointment(db, slot['id'], 'p-001', 'task-1')
+        again = H.create_appointment(db, slot['id'], 'p-001', 'task-1')
         db.commit()
     assert again['id'] == appt['id'] and appt['pay_status'] == 'unpaid'
     assert H.slot(slot['id'])['remaining'] == slot['remaining'] - 1
 
 
 @pytest.mark.asyncio
-async def test_one_sentence_booking_ranks_options_with_rules_only():
+async def test_one_sentence_booking_ranks_options_with_rules_only(monkeypatch):
+    captured = {}
+    async def fake_start(agent, user_id, option, meta, **kwargs):
+        captured.update(option=option, meta=meta)
+        return "task"
+    monkeypatch.setattr(care, "start_booking", fake_start)
     a = make_agent()
     m = message('child', '@小艺 帮我妈挂明天上午的号')
     assert await care.on_message(a, 1, m) is True
-    card = care_cards('hospital_options')[-1]
-    d = card['care']['data']
-    assert d['patient'] == 'mom' and d['department'] == '骨科' and d['session'] == 'morning'
-    top = d['options'][0]
-    assert top['doctor'] == '张明远' and top['campus'] == '总院' and top['needs_approval']
-    assert top['score'] > d['options'][1]['score']
-    assert any(c['campus'] == '东院区' for c in d['compare'])
-    steps = care.trace_list()[0]['steps']
-    kinds = [s['kind'] for s in steps]
-    assert 'skill' in kinds and 'card' in kinds and 'llm' not in kinds
+    assert not care_cards('hospital_options')
+    assert captured['meta']['patient'] == 'mom'
+    assert captured['meta']['department'] == '骨科'
+    assert captured['option']['doctor'] == '张明远'
+    assert captured['option']['hospital_id']
+    assert not captured['option']['needs_approval']
+
 
 
 @pytest.mark.asyncio
-async def test_model_fills_slots_when_rules_cannot():
+async def test_model_fills_slots_when_rules_cannot(monkeypatch):
+    captured = {}
+    async def fake_start(agent, user_id, option, meta, **kwargs):
+        captured.update(meta)
+        return "task"
+    monkeypatch.setattr(care, "start_booking", fake_start)
     model = CareModel(booking={'patient': 'dad', 'department': '心血管内科', 'date': None, 'session': 'morning',
                                'reply': '好，给爸爸约心内科的号。'})
     a = make_agent(model)
     m = message('child', '@小艺 帮忙挂个号，最近头胀血压高')
     assert await care.on_message(a, 1, m) is True
-    d = care_cards('hospital_options')[-1]['care']['data']
-    assert d['patient'] == 'dad' and d['department'] == '心血管内科'
+    assert captured['patient'] == 'dad' and captured['department'] == '心血管内科'
     assert any(s['kind'] == 'llm' for s in care.trace_list()[0]['steps'])
 
 
@@ -192,3 +196,16 @@ def test_demo_api_reset_state_and_calendar():
         assert any(a['id'] == 'AP-HIS0001' for a in hospital['appointments'])
         assert client.get('/api/care/calendar/AP-HIS0001.ics').text.startswith('BEGIN:VCALENDAR')
         assert client.post('/api/hospital/appointments/AP-HIS0001/pay', json={'token': 'bad'}, headers=headers).status_code == 403
+
+@pytest.mark.asyncio
+async def test_query_department_without_patient_never_books(monkeypatch):
+    async def forbidden(*args, **kwargs):
+        raise AssertionError('read-only query must not book')
+    monkeypatch.setattr(care, 'start_booking', forbidden)
+    a = make_agent()
+    m = message('child', '@小艺 查询骨科号源')
+    assert await care.on_message(a, 1, m)
+    with DB() as db:
+        reply = db.query(Message).filter_by(group_id=1, user_id=0).order_by(Message.id.desc()).first()
+        assert '模拟号源' in reply.content
+        assert all(c['name'] in reply.content for c in H.catalog()['campuses'])

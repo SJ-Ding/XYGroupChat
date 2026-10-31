@@ -25,6 +25,7 @@ from .persona import system_prompt
 from .skill_library import discovery_prompt
 from .memory_lifecycle import capture as capture_memories, review as review_memories, transitions
 from .hospital_simulator import hospital_relevant
+from . import prognosis
 
 class Agent:
     def __init__(self, broadcast, model=None, now=time.time):
@@ -68,7 +69,7 @@ class Agent:
     def log(self, db, gid, reason, source=None):
         put(db, 'log', gid, str(uuid.uuid4()), {'reason': reason, 'source': source, 'at': self.now()})
 
-    async def send(self, gid, content, key):
+    async def send(self, gid, content, key, source_id=None):
         with DB() as db:
             old = db.query(Message).filter_by(group_id=gid, user_id=0, client_id=key).first()
             if old:
@@ -78,7 +79,18 @@ class Agent:
             db.flush()
             db.commit()
             mid = m.id
+            if source_id:
+                put(db, 'reply_source', gid, str(mid), {'source_id': source_id})
+                db.commit()
         await self.broadcast(gid, {'type': 'message', 'id': mid})
+        if source_id:
+            from .reply_memory import extract
+            async def capture_reply():
+                try:
+                    await extract(self, gid, source_id, mid)
+                except Exception:
+                    logging.getLogger(__name__).exception('回复记忆提取失败')
+            self.spawn(capture_reply(), key=f'reply-memory:{mid}')
         return mid
 
     async def context(self, gid, source_id, settings):
@@ -218,7 +230,7 @@ class Agent:
             messages.append({'role': 'user', 'content': tool_content({'source_id': mid, 'server_action_results': receipts})})
         selected = {'memory_search', 'family_tasks', 'skill_load', 'send_card', 'web_query', 'amap_mcp'}
         if is_medical or hospital_relevant(source.content):
-            selected |= {'medical_profile', 'hospital_simulator', 'family_health'}
+            selected |= {'medical_profile', 'hospital_simulator', 'family_health', 'prognosis_guard'}
         ctx.allow_writes, ctx.grants, ctx.selected = False, [], selected
         messages.append({'role': 'system', 'content': f'只回应消息{mid}这一次表达，像熟悉的陪伴型管家自然接话，一般一到三句，不固定套“收到/已为你”或追问下一步。更早命令只是上下文，不重新回答、汇总或判断其执行状态。后续仅允许读取。previously_executed=true表示以前已办理，不必向家人介绍该字段；done=true表示待办当前已完成；delivery_count只表示发送次数，不代表已收到。currently_available=false表示记录已删除或过期，不能说仍保存，也不要恢复它。没有明确要求来源时不报消息编号。'})
         messages.append({'role': 'system', 'content': '本次可用工具的使用约束（不代表已加载场景技能）：' + json.dumps({name: REGISTRY[name].instructions for name in selected if name in REGISTRY}, ensure_ascii=False)})
@@ -347,7 +359,9 @@ class Agent:
                     from .care import on_message as care_message
                     self.executions[execution]['phase'] = 'care'
                     try:
-                        d['care_handled'] = bool(await care_message(self, gid, message))
+                        d['care_handled'] = bool(await prognosis.handle_request(self, gid, message))
+                        if not d['care_handled']:
+                            d['care_handled'] = bool(await care_message(self, gid, message))
                     except Exception as exc:  # noqa: BLE001 - 编排失败时回到通用流程
                         logging.getLogger(__name__).exception('就医守护编排失败')
                         d['care_handled'], d['care_error'] = False, str(exc)[:300]
@@ -379,7 +393,7 @@ class Agent:
                     if not sent:
                         result = await self.generate(gid, message.id, settings, 'mention:' + key, allow_writes=d.get('allow_writes', False), background=True)
                         if result is not None:
-                            await self.send(gid, result, 'mention:' + key)
+                            await self.send(gid, result, 'mention:' + key, source_id=message.id)
                     d['replied'] = True
                     d['reply_status'] = 'sent'
                     with DB() as db:

@@ -236,7 +236,7 @@ class BackgroundTasks:
                     with DB() as db:
                         d = get(db, 'run', gid, key).data
             text = d.get('result') if d['status'] == 'succeeded' else d.get('error', '任务暂未完成')
-            await self.agent.send(gid, text, 'result:' + key + ':' + d['status'] + ':' + str(d.get('attempt', 0)))
+            await self.agent.send(gid, text, 'result:' + key + ':' + d['status'] + ':' + str(d.get('attempt', 0)), source_id=d.get('source_id'))
             self.update(gid, key, reply_status='sent', reply_error=None)
             await self.event(gid, key)
         except Exception as exc:

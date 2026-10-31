@@ -28,7 +28,7 @@ export default function App() {
               <span className="text-lg font-bold text-white">+</span>
             </div>
             <div className="leading-tight">
-              <div className="font-semibold text-white" style={{ fontSize: 16 }}>市第一人民医院</div>
+              <div className="font-semibold text-white" style={{ fontSize: 16 }}>附近两家医院</div>
               <div className="text-white/70" style={{ fontSize: 11 }}>互联网预约服务平台</div>
             </div>
           </Link>
@@ -82,7 +82,7 @@ export default function App() {
 
       {/* Footer */}
       <footer className="text-center py-6 text-xs" style={{ background: '#183B56', color: 'rgba(255,255,255,.4)' }}>
-        市第一人民医院 · 互联网预约服务平台（模拟演示） · © 2026 · 预约热线 12333
+        附近两家医院 · 互联网预约服务平台（模拟演示） · © 2026 · 医院基础信息来自高德 · 医生、号源和费用均为模拟
       </footer>
     </div>
   );

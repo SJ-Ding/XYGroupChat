@@ -12,10 +12,10 @@ export function HomePage() {
       <section className="relative overflow-hidden" style={{ background: 'linear-gradient(135deg, #176A9B 0%, #145A84 100%)' }}>
         <div className="mx-auto px-6" style={{ maxWidth: 1280, minHeight: 300 }}>
           <div className="flex flex-col justify-center py-12" style={{ minHeight: 300 }}>
-            <h1 className="font-bold text-white" style={{ fontSize: 32 }}>市第一人民医院</h1>
-            <p className="mt-2 text-white/80" style={{ fontSize: 18 }}>三级甲等综合医院 · 互联网预约服务平台</p>
+            <h1 className="font-bold text-white" style={{ fontSize: 32 }}>附近两家医院</h1>
+            <p className="mt-2 text-white/80" style={{ fontSize: 18 }}>医院基础信息来自高德 · 挂号模拟演示</p>
             <p className="mt-4 text-white/60 text-sm leading-relaxed max-w-2xl">
-              提供在线预约挂号、排班查询、就诊指南等服务。预约开放时间：每日 8:00-17:00，可预约未来 7 天号源。
+              医生、号源、费用和预约均为模拟数据，不代表真实医院排班。预约开放时间：每日 8:00-17:00，可预约未来 7 天号源。
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
               <Link to="/appointment/departments" className="h-btn-primary px-6 py-3 text-base">
@@ -79,7 +79,7 @@ export function HomePage() {
               <li className="flex items-start gap-2"><span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ background: '#176A9B' }} /> 互联网预约服务平台已上线，支持在线预约挂号。</li>
               <li className="flex items-start gap-2"><span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ background: '#176A9B' }} /> 骨科张明远副主任医师本周一至周五上午坐诊。</li>
               <li className="flex items-start gap-2"><span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ background: '#176A9B' }} /> 10月31日内分泌科钱伟主任医师上午专家门诊。</li>
-              <li className="flex items-start gap-2"><span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ background: '#D69B32' }} /> 心血管内科11月1日起增设东院区专家门诊。</li>
+              <li className="flex items-start gap-2"><span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full" style={{ background: '#D69B32' }} /> 两院科室排班仅用于模拟流程演示。</li>
             </ul>
           </div>
           <div className="h-card p-5">

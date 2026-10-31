@@ -25,7 +25,6 @@ from .db import DB, Record, get, put
 CATALOG_PATH = Path(__file__).resolve().parent.parent / 'hospital' / 'src' / 'catalog.json'
 KIND = 'hospital_appt'
 GID = 0
-APPROVAL_THRESHOLD = 50
 LOCK_MINUTES = 15
 MORNING = {'主任医师': ['08:30', '10:00'], 'default': ['08:00', '08:30', '09:30']}
 AFTERNOON = ['14:00', '15:30']
@@ -143,7 +142,7 @@ def generate_slots(dates=None):
                     if status == 'available' and democlock.at(date, start) <= now:
                         status, remaining = 'full', 0
                     slots.append({
-                        'id': sid, 'doctorId': doc['id'], 'departmentId': dept['id'], 'campusId': cid,
+                        'hospitalId': campus(cid).get('hospitalId', 'legacy-hospital'), 'id': sid, 'doctorId': doc['id'], 'departmentId': dept['id'], 'campusId': cid,
                         'date': date, 'startTime': start, 'endTime': _end(start), 'session': session,
                         'category': 'expert' if doc['title'] == '主任医师' else 'general',
                         'price': price(doc['title'], cid, session), 'capacity': capacity,
@@ -193,6 +192,8 @@ def pay_token(appt_id):
 
 def public(appt):
     value = dict(appt)
+    value.setdefault('hospitalId', 'legacy-hospital')
+    value.setdefault('hospitalName', appt.get('campusName', '历史模拟医院'))
     if value.get('status') == 'confirmed' and value.get('pay_status') == 'unpaid' and value.get('lock_expires') and value['lock_expires'] < democlock.now():
         value['pay_status'] = 'expired'
     value['payToken'] = pay_token(value['id'])
@@ -200,7 +201,7 @@ def public(appt):
 
 
 def create_appointment(db, slot_id, patient_id, task_id='', token='', created=None):
-    """创建预约：校验号源、授权阈值与幂等，成功后号源自然扣减。"""
+    """创建预约：校验号源、幂等，成功后号源自然扣减。"""
     if task_id:
         for a in appointments(db):
             if a.get('taskId') == task_id and a.get('status') != 'cancelled':
@@ -208,6 +209,8 @@ def create_appointment(db, slot_id, patient_id, task_id='', token='', created=No
     s = slot(slot_id)
     if not s:
         raise ValueError('号源不存在')
+    if s['date'] not in window():
+        raise ValueError('仅支持未来七天内的模拟号源')
     if s['status'] == 'suspended':
         raise ValueError('该号源已停诊')
     if s['remaining'] <= 0 or s['status'] != 'available':
@@ -215,8 +218,6 @@ def create_appointment(db, slot_id, patient_id, task_id='', token='', created=No
     p = patient(patient_id)
     if not p:
         raise ValueError('就诊人不存在')
-    if s['price'] > APPROVAL_THRESHOLD and not (task_id and token.startswith('tk-')):
-        raise ValueError(f"挂号费 {s['price']} 元超过家庭授权额度 {APPROVAL_THRESHOLD} 元，需要家人在小艺中确认授权")
     for a in appointments(db):
         if a.get('patientId') == patient_id and a.get('status') == 'confirmed' and a.get('date') == s['date'] and a.get('session') == s['session']:
             raise ValueError('同一时段每人限约一个号源')
@@ -224,7 +225,7 @@ def create_appointment(db, slot_id, patient_id, task_id='', token='', created=No
     now = democlock.now() if created is None else created
     appt_id = 'AP-' + hashlib.sha256(f'{slot_id}:{patient_id}:{task_id}:{time.time()}'.encode()).hexdigest()[:8].upper()
     appt = {
-        'id': appt_id, 'slotId': slot_id, 'campusId': camp['id'], 'campusName': camp['name'],
+        'hospitalId': camp.get('hospitalId', 'legacy-hospital'), 'hospitalName': camp['name'], 'id': appt_id, 'slotId': slot_id, 'campusId': camp['id'], 'campusName': camp['name'],
         'deptId': dept['id'], 'deptName': dept['name'], 'doctorId': doc['id'], 'doctorName': doc['name'],
         'doctorTitle': doc['title'], 'date': s['date'], 'session': s['session'], 'startTime': s['startTime'],
         'endTime': s['endTime'], 'category': s['category'], 'fee': s['price'], 'patientName': p['name'],
@@ -316,7 +317,7 @@ def state():
     with DB() as db:
         rows = [public(a) for a in appointments(db)]
     return {'today': democlock.today(), 'now': democlock.now(), 'hospital': catalog()['hospital'],
-            'slots': generate_slots(), 'appointments': rows}
+            'campuses': catalog()['campuses'], 'hospitals': catalog().get('hospitals', []), 'slots': generate_slots(), 'appointments': rows}
 
 
 @router.post('/appointments')

@@ -30,7 +30,7 @@ FAMILY = {
 }
 CAREGIVER = 'child'
 ELDERS = ('mom', 'dad')
-HOME = {'address': '南京市鼓楼区中山北路200号', 'city': '南京', 'lng': 118.768343, 'lat': 32.074076}
+HOME = {'address': '南京市鼓楼区中山北路（道路级位置）', 'city': '南京', 'lng': 118.761667, 'lat': 32.078348}
 
 
 def user_ids(db):
@@ -89,19 +89,21 @@ def seed(db):
     # 家庭档案：结构化医疗记忆（domain=medical，带 profile）+ 日常偏好
     _memory(db, ids, 'seed-mom-history', 'mom', '妈妈（王秀兰，62岁）2024年右膝半月板损伤，阴雨天和久走后容易酸痛',
             'medical', {'record_type': 'history', 'condition': '右膝半月板损伤', 'department': '骨科'}, 'medical')
-    _memory(db, ids, 'seed-mom-hospital', 'mom', '妈妈常去市第一人民医院总院骨科，近一年就诊过3次',
-            'medical', {'record_type': 'hospital', 'hospital': '市第一人民医院', 'campus': '总院', 'campus_id': 'c-main',
+    from . import hospital_data as H
+    hospital_name = H.campus('c-main')['name']
+    _memory(db, ids, 'seed-mom-hospital', 'mom', f'妈妈常去{hospital_name}骨科，近一年模拟就诊过3次',
+            'medical', {'record_type': 'hospital', 'hospital': hospital_name, 'hospital_id': H.campus('c-main').get('hospitalId'), 'campus': hospital_name, 'campus_id': 'c-main',
                         'department': '骨科', 'visits': 3}, 'medical')
     _memory(db, ids, 'seed-mom-doctor', 'mom', '妈妈上次看的是骨科张明远副主任医师，对他很信任',
             'medical', {'record_type': 'doctor', 'doctor': '张明远', 'doctor_id': 'doc-g1', 'department': '骨科'}, 'medical')
     _memory(db, ids, 'seed-mom-allergy', 'mom', '妈妈对青霉素过敏，就诊时要提醒医生',
             'medical', {'record_type': 'history', 'allergy': '青霉素'}, 'medical')
     _memory(db, ids, 'seed-mom-pref', 'mom', '妈妈上午精神好，看病喜欢约上午的号', category='preference')
-    _memory(db, ids, 'seed-mom-home', 'mom', '妈妈和爸爸住在南京鼓楼区中山北路，离市一院总院和东院区都不远', category='fact')
+    _memory(db, ids, 'seed-mom-home', 'mom', '妈妈和爸爸住在南京鼓楼区中山北路，附近有两家综合医院，位置精度为道路级', category='fact')
     _memory(db, ids, 'seed-dad-history', 'dad', '爸爸（林志强，65岁）高血压多年，每天早上8点吃氨氯地平5mg',
             'medical', {'record_type': 'medication', 'condition': '高血压', 'department': '心血管内科',
                         'medications': [{'name': '氨氯地平', 'dosage': '5mg', 'frequency': '每日一次 08:00'}]}, 'medical')
-    _memory(db, ids, 'seed-dad-hospital', 'dad', '爸爸在市一院总院心血管内科看陈志强主任，每三个月复查一次血压',
+    _memory(db, ids, 'seed-dad-hospital', 'dad', f'爸爸在{hospital_name}模拟心血管内科看陈志强主任，每三个月复查一次血压',
             'medical', {'record_type': 'doctor', 'doctor': '陈志强', 'doctor_id': 'doc-x1', 'department': '心血管内科'}, 'medical')
     _memory(db, ids, 'seed-dad-habit', 'dad', '爸爸不爱去大医院排队，降压药偶尔会忘吃', category='preference')
     _memory(db, ids, 'seed-child', 'child', '小林在上海工作，是家里的照护人，平时远程帮爸妈办事', category='fact')

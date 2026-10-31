@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { CheckCircle2, ShieldAlert, Loader2, ChevronLeft, Info } from 'lucide-react';
-import { DEPARTMENTS, DOCTORS, CAMPUSES, PATIENTS, APPROVAL_THRESHOLD, getDraft, saveDraft, submitAppointment, getSlotById } from '../data';
+import { CheckCircle2, Loader2, ChevronLeft, Info } from 'lucide-react';
+import { DEPARTMENTS, DOCTORS, CAMPUSES, PATIENTS, getDraft, saveDraft, submitAppointment, getSlotById } from '../data';
 import { Breadcrumb, StepBar } from '../components';
 
 const CATEGORY_LABEL: Record<string, string> = { general: '普通门诊', expert: '专家门诊', special: '特需门诊' };
@@ -37,10 +37,8 @@ export function ConfirmPage() {
     );
   }
 
-  const needApproval = slot.price > APPROVAL_THRESHOLD;
   const taskId = params.get('task_id') || sessionStorage.getItem('hospital_task_id') || '';
   const token = params.get('token') || sessionStorage.getItem('hospital_token') || '';
-  const hasToken = !!token;
 
   async function handleSubmit() {
     setError('');
@@ -48,7 +46,7 @@ export function ConfirmPage() {
     setSubmitting(true);
     await new Promise((r) => setTimeout(r, 400));
 
-    // 后端统一校验号源、授权额度与幂等，返回带支付凭证的预约
+    // 后端统一校验号源、幂等，返回带支付凭证的预约
     const res = await submitAppointment({ slotId: slot!.id, patientId: patient!.id, taskId, token });
     setSubmitting(false);
     if (res.ok && res.appointment) {
@@ -81,19 +79,6 @@ export function ConfirmPage() {
             <Row label="就诊人" value={`${patient.name}（${patient.relation}）`} />
             <Row label="挂号费" value={`¥${slot.price}`} highlight />
           </dl>
-
-          {needApproval && (
-            <div className="mt-5 flex items-start gap-3 rounded-xl p-4" style={{ background: '#FFF7E6', border: '1px solid #F5E6C8' }}>
-              <ShieldAlert className="mt-0.5 w-5 h-5 flex-shrink-0" style={{ color: '#D69B32' }} />
-              <div className="text-sm" style={{ color: '#92400E' }}>
-                <div className="font-medium">需要家人授权</div>
-                <p className="mt-1">本次挂号费 ¥{slot.price}，超过家庭设置的 ¥{APPROVAL_THRESHOLD} 额度。需家人确认授权后方可提交。</p>
-                <p className="mt-1 text-xs" style={{ color: hasToken ? '#218767' : '#D69B32' }}>
-                  {hasToken ? '✅ 已检测到家人授权，可提交' : '⚠ 未检测到家人授权，提交将被拒绝'}
-                </p>
-              </div>
-            </div>
-          )}
 
           {error && (
             <div className="mt-4 rounded-xl p-4 text-sm" style={{ background: '#FEF2F2', border: '1px solid #FECACA', color: '#CB4B4B' }}>{error}</div>
