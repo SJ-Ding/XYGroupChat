@@ -139,7 +139,7 @@ async def remind(ctx, args):
         if args['at'] <= (ctx.now if ctx.now is not None else time.time()):
             raise ValueError('提醒时间必须晚于现在，使用 Unix 秒时间戳')
         put(db, 'reminder', ctx.group_id, key, {'content': args['content'], 'at': args['at'], 'sent': False,
-            'user_id': ctx.user_id, 'channel': 'personal' if ctx.group_id < 0 else 'group', 'status': 'active', 'version': 1})
+            'user_id': ctx.user_id, 'source_id': ctx.source_id, 'channel': 'personal' if ctx.group_id < 0 else 'group', 'status': 'active', 'version': 1})
         db.commit()
     return {'key': key, 'scheduled': True}
 

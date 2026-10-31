@@ -8,6 +8,45 @@ from .governance import metrics
 from .memory_lifecycle import status as memory_status
 
 
+def care_reminders(db, gid):
+    """Project care schedules for display; the care scheduler owns execution."""
+    from . import democlock
+    now = democlock.now()
+    today = democlock.today(now)
+    names = {'dad': '爸爸', 'mom': '妈妈', 'child': '小林'}
+    rows = []
+    for r in records(db, 'care_item', gid):
+        d = r.data
+        kind = d.get('type')
+        if kind not in ('medication', 'rehab', 'followup'):
+            continue
+        status = d.get('status', 'active')
+        clock = d.get('clock', '08:30')
+        if kind == 'followup':
+            at = d.get('briefing_at')
+            if status == 'active' and d.get('briefing_sent'):
+                status = 'completed'
+            repeat = None
+        else:
+            date = max(today, d.get('start') or today)
+            at = democlock.at(date, clock)
+            if at <= now:
+                date = democlock.shift_date(date, 1)
+                at = democlock.at(date, clock)
+            if d.get('end') and date > d['end']:
+                at = democlock.at(d['end'], clock)
+                if status == 'active':
+                    status = 'expired'
+            repeat = clock
+        member = names.get(d.get('member'), d.get('member', ''))
+        action = {'medication': '用药提醒', 'rehab': '康复提醒', 'followup': '复诊前简报与预约'}[kind]
+        rows.append(dict(key='care:' + r.key, content=f"{member} · {action}：{d.get('title', '')}",
+            at=at, status=status, clock=repeat, timezone='Asia/Shanghai', channel='group',
+            category=kind, source=d.get('source_id'), updated=r.updated,
+            start=d.get('start'), end=d.get('end'), detail=d.get('detail'), origin='care'))
+    return rows
+
+
 def worklist(agent, gid):
     """User-facing agent work, without legacy family todos or execution secrets."""
     from .cards import visible_run
@@ -50,12 +89,13 @@ def worklist(agent, gid):
         for r in records(db, 'reminder', gid):
             d = r.data
             reminders.append(dict(key=r.key, content=d.get('content', ''), at=d.get('at'),
-                status='cancelled' if d.get('status', 'active') != 'active' else 'completed' if d.get('sent') else 'active',
+                status=d.get('status', 'active') if d.get('status', 'active') != 'active' else 'completed' if d.get('sent') else 'active',
                 clock=d.get('clock'), weekdays=d.get('weekdays'), timezone=d.get('timezone', 'Asia/Shanghai'),
                 channel=d.get('channel', 'group'), category=d.get('category', 'daily'),
                 source=d.get('source_id'), updated=r.updated))
+        reminders.extend(care_reminders(db, gid))
         scheduled = sorted((d for d in reminders if d['status'] == 'active'), key=lambda d: d['at'] or 0)
-        reminder_history = sorted((d for d in reminders if d['status'] != 'active'), key=lambda d: d['updated'], reverse=True)[:50]
+        reminder_history = sorted((d for d in reminders if d['status'] != 'active'), key=lambda d: d['updated'], reverse=True)
         return {'tasks': pending + history, 'reminders': scheduled + reminder_history}
 
 def snapshot(agent, gid):

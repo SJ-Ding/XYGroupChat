@@ -64,3 +64,49 @@ def test_worklist_endpoint_requires_membership_and_is_read_only():
         response = client.get('/api/groups/1/agent/worklist?user=dad')
         assert response.status_code == 200
         assert response.json() == {'tasks': [], 'reminders': []}
+
+
+def test_worklist_preserves_paused_and_all_reminder_history():
+    with DB() as db:
+        put(db, 'reminder', 1, 'dad-medication', {
+            'content': '爸爸吃药', 'at': 200, 'status': 'paused',
+            'clock': '08:30', 'category': 'medication', 'source_id': 42})
+        for i in range(55):
+            put(db, 'reminder', 1, 'old:' + str(i), {
+                'content': '历史提醒', 'at': 100, 'sent': True})
+        db.commit()
+    rows = worklist(Agent(no_broadcast, FakeModel()), 1)['reminders']
+    assert len(rows) == 56
+    medication = next(r for r in rows if r['key'] == 'dad-medication')
+    assert medication['status'] == 'paused'
+    assert medication['category'] == 'medication'
+    assert medication['source'] == 42
+
+
+def test_care_schedules_are_visible_without_creating_duplicate_reminders(monkeypatch):
+    from backend import democlock
+    from backend.db import records
+    now = democlock.at('2026-10-31', '09:00')
+    monkeypatch.setattr(democlock, 'now', lambda: now)
+    with DB() as db:
+        base = dict(member='dad', type='medication', title='原医嘱', clock='08:00',
+                    start='2026-09-01', status='active')
+        put(db, 'care_item', 1, 'dad-med', base)
+        put(db, 'care_item', 1, 'expired', {**base, 'end': '2026-10-30'})
+        put(db, 'care_item', 1, 'future', {**base, 'start': '2026-11-10'})
+        put(db, 'care_item', 1, 'followup', dict(member='mom', type='followup', title='骨科复诊',
+            briefing_at=now + 3600, status='active', briefing_sent=False))
+        put(db, 'care_item', 1, 'sent-briefing', dict(member='mom', type='followup', title='简报',
+            briefing_at=now - 3600, status='active', briefing_sent=True))
+        put(db, 'care_item', 2, 'foreign', base)
+        db.commit()
+    rows = {r['key']: r for r in worklist(Agent(no_broadcast, FakeModel()), 1)['reminders']}
+    assert len(rows) == 5
+    assert rows['care:dad-med']['at'] == democlock.at('2026-11-01', '08:00')
+    assert '爸爸' in rows['care:dad-med']['content']
+    assert rows['care:expired']['status'] == 'expired'
+    assert rows['care:future']['at'] == democlock.at('2026-11-10', '08:00')
+    assert rows['care:followup']['at'] == now + 3600
+    assert rows['care:sent-briefing']['status'] == 'completed'
+    with DB() as db:
+        assert records(db, 'reminder', 1) == []
