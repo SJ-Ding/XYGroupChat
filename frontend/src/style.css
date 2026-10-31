@@ -1318,6 +1318,23 @@ small {
   scrollbar-width: thin;
   min-height: 0;
 }
+.worklist-toolbar, .worklist-tabs { display: flex; gap: 10px; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.worklist-toolbar { font-size: 13px; color: #627369; flex-wrap: wrap; }
+.worklist-toolbar label, .worklist-toolbar button, .worklist-tabs button { display: flex; align-items: center; gap: 6px; }
+.worklist-toolbar button { padding: 6px; }
+.worklist-tabs { border-bottom: 1px solid var(--border); }
+.worklist-tabs button { padding: 10px 0; color: #627369; border-bottom: 2px solid transparent; font-size: 14px; }
+.worklist-tabs button.selected { color: #315b42; border-color: #315b42; }
+.worklist-tabs span { font-size: 12px; background: #eef4ef; border-radius: 10px; padding: 1px 6px; }
+.worklist-card { border: 1px solid var(--border); border-radius: 10px; padding: 15px; margin-bottom: 12px; overflow-wrap: anywhere; }
+.worklist-card p { margin: 10px 0; line-height: 1.7; white-space: pre-wrap; }
+.worklist-card time { display: block; margin-top: 10px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.worklist-card small { display: block; color: #627369; line-height: 1.6; }
+.worklist-source { color: #315b42; margin-top: 10px; text-decoration: underline; }
+.with-panel .chat-header > div:first-child { flex-shrink: 0; }
+.with-panel .header-members { display: none; }
+.with-panel .header-actions { flex-wrap: wrap; justify-content: flex-end; min-width: 0; }
+@media (max-width: 1720px) { .with-panel .conversations { display: none; } }
 .panel-intro {
   font-size: 14px;
   color: #9aa69e;

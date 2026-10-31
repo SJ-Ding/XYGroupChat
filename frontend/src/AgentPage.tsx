@@ -69,7 +69,6 @@ type Status = {
   logs: { reason: string; source: number | null; at: number }[];
   skills: { name: string; description: string; writes: boolean }[];
   tool_runs: { key: string; name: string; at: number; result: string }[];
-  reminders: { key: string; content: string; at: number }[];
   memory_status?: MemoryStatus;
 };
 const labels: Record<string, string> = {
@@ -296,7 +295,7 @@ export default function AgentPage({
                 ["jobs", "处理任务"],
                 ["demands", "主动跟进"],
                 ["logs", "决策记录"],
-                ["skills", "Skill 与提醒"],
+                ["skills", "Skill 执行"],
                 ["memory", "记忆整理"],
               ].map(([key, label]) => (
                 <button
@@ -482,16 +481,6 @@ export default function AgentPage({
                     </div>
                   ))}
                 </div>
-                <h2>待发送提醒</h2>
-                {!data.reminders.length && (
-                  <p className="monitor-empty">暂无待发送的群内提醒。</p>
-                )}
-                {data.reminders.map((r) => (
-                  <div className="monitor-log" key={r.key}>
-                    <time>{stamp(r.at)}</time>
-                    <p>{r.content}</p>
-                  </div>
-                ))}
                 <h2>最近 Skill 执行</h2>
                 {!data.tool_runs.length && (
                   <p className="monitor-empty">暂无 Skill 执行记录。</p>

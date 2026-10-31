@@ -18,7 +18,7 @@ from pydantic import BaseModel, Field
 from .db import DB, DATA, User, Member, Message, Record, get, put, records, migrate
 from .memory import save_memory, delete_memory, search, list_memories, visible
 from .agent import Agent
-from .monitor import snapshot
+from .monitor import snapshot, worklist
 from .debugging import message_list, message_detail, message_annotations
 from .auth import COOKIE, session_user
 from .intent import direct_mention
@@ -429,6 +429,11 @@ def activity(gid: int, user=Depends(current)):
 def agent_status(gid: int, user=Depends(current)):
     access(gid, user)
     return snapshot(agent, gid)
+
+@app.get('/api/groups/{gid}/agent/worklist')
+def agent_worklist(gid: int, user=Depends(current)):
+    access(gid, user)
+    return worklist(agent, gid)
 
 @app.get('/api/groups/{gid}/agent/chains')
 def agent_chains(gid: int, ids: str = '', user=Depends(current)):

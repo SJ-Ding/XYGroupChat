@@ -35,6 +35,7 @@ import "./care/care.css";
 import { ConversationCard, TaskBar } from "./ConversationCard";
 import type { ChatCard, AgentTask } from "./types";
 import AgentPage from "./AgentPage";
+import AgentWorklist from "./AgentWorklist";
 import MessageDetails from "./MessageDetails";
 import { ExecutionChain, useExecutionChains } from "./ExecutionChain";
 import { ChatAnnotation, useChatAnnotations } from "./ChatDebug";
@@ -45,7 +46,6 @@ import type {
   User,
   Message,
   Memory,
-  Task,
   Config,
   Activity,
   Panel,
@@ -92,7 +92,6 @@ export default function Chat({
     [panel, setPanel] = useState<Panel>(null),
     [config, setConfig] = useState<Config | null>(null),
     [memories, setMemories] = useState<Memory[]>([]),
-    [tasks, setTasks] = useState<Task[]>([]),
     [activity, setActivity] = useState<Activity>({ logs: [], failed: [] });
   const [draft, setDraft] = useState(""),
     [images, setImages] = useState<string[]>([]),
@@ -110,7 +109,6 @@ export default function Chat({
       key?: string;
       content: string;
     } | null>(null),
-    [taskEdit, setTaskEdit] = useState<Task | null>(null),
     [revisions, setRevisions] = useState<
       { previous: { content: string }; at: number }[] | null
     >(null);
@@ -201,16 +199,14 @@ export default function Chat({
     setStatus(state.foreground.status);
   }
   async function refresh() {
-    const [c, m, t, a, u] = await Promise.all([
+    const [c, m, a, u] = await Promise.all([
       api<Config>(base + "/settings"),
       api<Memory[]>(base + "/memories"),
-      api<Task[]>(base + "/tasks"),
       api<Activity>(base + "/activity"),
       api<User[]>(base + "/members"),
     ]);
     setConfig((old) => (settingsDirty.current ? old : c));
     setMemories(m);
-    setTasks(t);
     setActivity(a);
     setMembers(u);
   }
@@ -407,21 +403,9 @@ export default function Chat({
       notify((e as Error).message);
     }
   }
-  async function saveTask(t: Task) {
-    try {
-      await api(base + "/tasks" + (t.key ? "/" + t.key : ""), {
-        method: t.key ? "PUT" : "POST",
-        body: JSON.stringify(t),
-      });
-      setTaskEdit(null);
-      await refresh();
-    } catch (e) {
-      notify((e as Error).message);
-    }
-  }
   const agentName = config?.agent_name || "小艺";
   return (
-    <main className={`shell ${panel ? "with-panel" : ""} ${elder ? "elder-mode" : ""} ${careOpen && view === "chat" && !elder ? "with-care" : ""}`}>
+    <main className={`shell ${panel ? "with-panel" : ""} ${elder ? "elder-mode" : ""} ${careOpen && view === "chat" && !elder && !panel ? "with-care" : ""}`}>
       <nav className="rail" aria-label="主导航">
         <button
           className="profile"
@@ -842,7 +826,7 @@ export default function Chat({
           </div>}
         </section>
       )}
-      {view === "chat" && careOpen && !elder && !observer && <SidePanel onClose={toggleCare} />}
+      {view === "chat" && careOpen && !elder && !observer && !panel && <SidePanel onClose={toggleCare} />}
       {debugSelection && <Modal title="消息上下文与决策" close={()=>setDebugSelection(null)}><MessageDetails source={debugSelection.source} traceKeys={debugSelection.keys} onSource={(id)=>{setDebugSelection(null);source(id);}}/></Modal>}
       {panel && (
         <>
@@ -857,7 +841,7 @@ export default function Chat({
                 {
                   {
                     memory: "家庭记忆",
-                    tasks: "家庭待办",
+                    tasks: "待办清单",
                     settings: "Agent 设置",
                     members: "群成员",
                   }[panel]
@@ -976,51 +960,7 @@ export default function Chat({
                   )}
                 </>
               )}
-              {panel === "tasks" && (
-                <>
-                  <p className="panel-intro">一家人的事，一起慢慢完成。</p>
-                  {tasks.map((t) => (
-                    <div
-                      className={"task-card " + (t.done ? "done" : "")}
-                      key={t.key}
-                    >
-                      <button
-                        className="task-check"
-                        aria-label={t.done ? "标为未完成" : "完成待办"}
-                        onClick={() => saveTask({ ...t, done: !t.done })}
-                      >
-                        {t.done && <Check size={15} />}
-                      </button>
-                      <button
-                        className="task-title"
-                        onClick={() => setTaskEdit(t)}
-                      >
-                        <strong>{t.title}</strong>
-                        <small>
-                          {members.find((m) => m.id === t.owner_id)?.name ||
-                            "未分配"}
-                          {t.due
-                            ? " · " +
-                              new Date(t.due * 1000).toLocaleString("zh-CN", {
-                                month: "numeric",
-                                day: "numeric",
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })
-                            : ""}
-                        </small>
-                      </button>
-                    </div>
-                  ))}
-                  {!tasks.length && (
-                    <Empty
-                      icon={<ListTodo />}
-                      text="暂时没有待办"
-                      detail="把要一起做的事情记下来吧。"
-                    />
-                  )}
-                </>
-              )}
+              {panel === "tasks" && <AgentWorklist onSource={(id) => { setPanel(null); navigate("chat"); source(id); }} />}
               {panel === "members" && (
                 <>
                   <p className="panel-intro">我们一家 · 3 位家人和 1 位助手</p>
@@ -1281,24 +1221,10 @@ export default function Chat({
                 </>
               )}
             </div>
-            {(panel === "memory" || panel === "tasks") && (
+            {panel === "memory" && (
               <footer>
-                <button
-                  className="add-button"
-                  onClick={() =>
-                    panel === "memory"
-                      ? setMemoryEdit({ content: "" })
-                      : setTaskEdit({
-                          key: "",
-                          title: "",
-                          done: false,
-                          owner_id: null,
-                          due: null,
-                        })
-                  }
-                >
-                  <Plus size={19} />
-                  {panel === "memory" ? "新增记忆" : "新增待办"}
+                <button className="add-button" onClick={() => setMemoryEdit({ content: "" })}>
+                  <Plus size={19} />新增记忆
                 </button>
               </footer>
             )}
@@ -1323,76 +1249,6 @@ export default function Chat({
           <button className="primary full" onClick={saveMemory}>
             保存记忆
           </button>
-        </Modal>
-      )}
-      {taskEdit && (
-        <Modal
-          title={taskEdit.key ? "编辑待办" : "新增家庭待办"}
-          close={() => setTaskEdit(null)}
-        >
-          <form
-            className="settings-form"
-            onSubmit={(e) => {
-              e.preventDefault();
-              saveTask(taskEdit);
-            }}
-          >
-            <label>
-              要做的事
-              <input
-                autoFocus
-                required
-                value={taskEdit.title}
-                onChange={(e) =>
-                  setTaskEdit({ ...taskEdit, title: e.target.value })
-                }
-              />
-            </label>
-            <label>
-              负责人
-              <select
-                value={taskEdit.owner_id || ""}
-                onChange={(e) =>
-                  setTaskEdit({
-                    ...taskEdit,
-                    owner_id: Number(e.target.value) || null,
-                  })
-                }
-              >
-                <option value="">未分配</option>
-                {members.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              到期时间
-              <input
-                type="datetime-local"
-                value={
-                  taskEdit.due
-                    ? new Date(
-                        taskEdit.due * 1000 -
-                          new Date().getTimezoneOffset() * 60000,
-                      )
-                        .toISOString()
-                        .slice(0, 16)
-                    : ""
-                }
-                onChange={(e) =>
-                  setTaskEdit({
-                    ...taskEdit,
-                    due: e.target.value
-                      ? new Date(e.target.value).getTime() / 1000
-                      : null,
-                  })
-                }
-              />
-            </label>
-            <button className="primary full">保存待办</button>
-          </form>
         </Modal>
       )}
       {revisions && (

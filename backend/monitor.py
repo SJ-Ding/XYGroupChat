@@ -7,6 +7,57 @@ from .background import public_task
 from .governance import metrics
 from .memory_lifecycle import status as memory_status
 
+
+def worklist(agent, gid):
+    """User-facing agent work, without legacy family todos or execution secrets."""
+    from .cards import visible_run
+    with DB() as db:
+        tasks = []
+        runs = [r for r in records(db, 'run', gid) if visible_run(r.data)]
+        covered = {r.data.get('source_id') for r in runs}
+        sources = {r.data.get('source_id') for r in runs}
+        sources.update(r.data.get('source') for r in records(db, 'job', gid))
+        messages = dict(db.query(Message.id, Message.content).filter(Message.group_id == gid, Message.id.in_(sources)).all())
+        running = {x['key'] for x in agent.executions.values() if x['group_id'] == gid}
+        for r in runs:
+            d = r.data
+            source = d.get('source_id')
+            card = get(db, 'card', gid, 'run:' + r.key)
+            tasks.append(dict(key='run:' + r.key, title=d.get('title') or messages.get(source) or 'Agent 任务',
+                status=d.get('status', 'queued'), source=source or (card.data.get('message_id') if card else None),
+                updated=d.get('updated') or r.updated, error=d.get('error')))
+        for r in records(db, 'job', gid):
+            d = r.data
+            if d.get('source') in covered:
+                continue
+            status = d.get('status', 'pending')
+            if status == 'pending' and r.key in running:
+                status = 'running'
+            tasks.append(dict(key='job:' + r.key, title=messages.get(d.get('source')) or '分析图片消息',
+                status=status, source=d.get('source'), updated=r.updated, error=d.get('error')))
+        for r in records(db, 'demand', gid):
+            d = r.data
+            if d.get('status') not in ('waiting', 'failed'):
+                continue
+            tasks.append(dict(key='demand:' + r.key, title=d.get('text') or '等待跟进',
+                status=d.get('status'), source=d.get('source'), updated=r.updated,
+                deadline=d.get('deadline'), error=d.get('error')))
+        active = {'pending', 'queued', 'running', 'waiting', 'waiting_input', 'waiting_authorization', 'failed', 'reply_failed'}
+        tasks.sort(key=lambda d: d['updated'] or 0, reverse=True)
+        pending = [d for d in tasks if d['status'] in active]
+        history = [d for d in tasks if d['status'] not in active][:50]
+        reminders = []
+        for r in records(db, 'reminder', gid):
+            d = r.data
+            reminders.append(dict(key=r.key, content=d.get('content', ''), at=d.get('at'),
+                status='cancelled' if d.get('status', 'active') != 'active' else 'completed' if d.get('sent') else 'active',
+                clock=d.get('clock'), weekdays=d.get('weekdays'), timezone=d.get('timezone', 'Asia/Shanghai'),
+                channel=d.get('channel', 'group'), category=d.get('category', 'daily'),
+                source=d.get('source_id'), updated=r.updated))
+        scheduled = sorted((d for d in reminders if d['status'] == 'active'), key=lambda d: d['at'] or 0)
+        reminder_history = sorted((d for d in reminders if d['status'] != 'active'), key=lambda d: d['updated'], reverse=True)[:50]
+        return {'tasks': pending + history, 'reminders': scheduled + reminder_history}
+
 def snapshot(agent, gid):
     now = agent.now()
     executions = [dict(v) for v in list(agent.executions.values()) if v['group_id'] == gid]
