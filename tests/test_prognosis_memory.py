@@ -91,7 +91,7 @@ def test_clicks_throttled_and_no_fabricated_result(monkeypatch):
     manager=AppointmentManager()
     manager._click(Page(),Locator(),session)
     manager._click(Page(),Locator(),session)
-    assert clicks[1]-clicks[0] >= 3
+    assert 1.5 <= clicks[1]-clicks[0] < 1.51
     with pytest.raises(RuntimeError,match='编号'):
         manager._complete(session,SimpleNamespace(inner_text=lambda _: '预约失败'))
 

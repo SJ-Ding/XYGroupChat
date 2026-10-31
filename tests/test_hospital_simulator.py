@@ -3,6 +3,7 @@ import threading
 import pytest
 
 from backend.db import DB, get
+from backend import hospital_data as H
 from backend.hospital_simulator import (
     automation,
     booking_context,
@@ -78,7 +79,7 @@ async def test_book_creates_run_and_card():
     try:
         result = await execute(
             "hospital_simulator",
-            {"action": "book", "instruction": "预约眼科上午", "mode": "mock"},
+            {"action": "book", "instruction": "预约眼科上午", "hospital_id": H.campus("c-main")["hospitalId"], "mode": "mock"},
             ctx,
         )
         assert result["ok"] and result["task_id"].startswith("appt-")
@@ -93,7 +94,7 @@ async def test_book_creates_run_and_card():
         # 同一条指令幂等复用，不重复启动浏览器
         again = await execute(
             "hospital_simulator",
-            {"action": "book", "instruction": "预约眼科上午", "mode": "mock"},
+            {"action": "book", "instruction": "预约眼科上午", "hospital_id": H.campus("c-main")["hospitalId"], "mode": "mock"},
             ctx,
         )
         assert again["task_id"] == task_id

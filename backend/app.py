@@ -527,8 +527,9 @@ install_routes(app, current, access)
 # 家人帮：就医守护编排、演示导演台、模拟医院数据接口
 from .care import install_routes as install_care_routes
 install_care_routes(app, current, access, agent)
-from .hospital_data import router as hospital_router
+from .hospital_data import router as hospital_router, app_router as hospital_app_router
 app.include_router(hospital_router)
+app.include_router(hospital_app_router)
 
 DIST = Path(__file__).resolve().parent.parent / 'frontend' / 'dist'
 if DIST.exists():

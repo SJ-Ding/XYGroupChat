@@ -5,11 +5,20 @@
 // ============================================================
 import catalog from './catalog.json';
 
+// Independent app identity comes from the URL, so tabs never share hospital selection.
+export const HOSPITALS = catalog.hospitals;
+const appMatch = window.location.pathname.match(/^\/hospital\/apps\/([^/]+)/);
+export const ACTIVE_HOSPITAL = HOSPITALS.find((h) => h.id === appMatch?.[1]);
+export const APP_BASE = ACTIVE_HOSPITAL ? `/hospital/apps/${ACTIVE_HOSPITAL.id}` : '/hospital';
+export const HOSPITAL_NAME = ACTIVE_HOSPITAL?.name || '选择模拟医院';
+export const appStorageKey = (key: string) => key + ':' + (ACTIVE_HOSPITAL?.id || 'legacy');
+
 // ---------------- 基础模型 ----------------
 export interface Campus {
   id: string;
   name: string;
   address: string;
+  hospitalId?: string;
   lng?: number;
   lat?: number;
   level?: string;
@@ -118,14 +127,14 @@ export interface AppointmentDraft {
   acceptedNotice: boolean;
 }
 
-const DRAFT_KEY = 'hospital-appointment-draft';
+const DRAFT_KEY = 'hospital-appointment-draft:' + (ACTIVE_HOSPITAL?.id || 'legacy');
 
 export function getDraft(): AppointmentDraft {
   try {
     const raw = localStorage.getItem(DRAFT_KEY);
     if (raw) return JSON.parse(raw);
   } catch { /* ignore */ }
-  return { campusId: null, departmentId: null, date: null, doctorId: null, slotId: null, patientId: null, acceptedNotice: false };
+  return { campusId: CAMPUSES[0]?.id || null, departmentId: null, date: null, doctorId: null, slotId: null, patientId: null, acceptedNotice: false };
 }
 
 export function saveDraft(draft: AppointmentDraft): void {
@@ -143,8 +152,8 @@ export function clearDraft(): void {
 // ============================================================
 // 目录数据（与后端共用 catalog.json）
 // ============================================================
-export const CAMPUSES: Campus[] = catalog.campuses;
-export const DEPARTMENTS: Dept[] = catalog.departments;
+export const CAMPUSES: Campus[] = catalog.campuses.filter((c) => !ACTIVE_HOSPITAL || c.hospitalId === ACTIVE_HOSPITAL.id);
+export const DEPARTMENTS: Dept[] = catalog.departments.filter((d) => !ACTIVE_HOSPITAL || d.campusIds.some((id) => CAMPUSES.some((c) => c.id === id)));
 export const PATIENTS: Patient[] = catalog.patients;
 export const DOCTORS: Doctor[] = catalog.doctors;
 
@@ -152,7 +161,7 @@ export const DOCTORS: Doctor[] = catalog.doctors;
 // ============================================================
 // 后端状态：号源 / 预约（启动时加载，提交后局部更新）
 // ============================================================
-const API = '/api/hospital';
+const API = ACTIVE_HOSPITAL ? `/api/hospital/apps/${ACTIVE_HOSPITAL.id}` : '/api/hospital';
 let _mockToday: string | null = null;
 export let SLOTS: AppointmentSlot[] = [];
 let _appointments: Appointment[] = [];

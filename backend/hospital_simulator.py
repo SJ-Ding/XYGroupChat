@@ -44,8 +44,9 @@ _CONFIRM_DETAILS_JS = r"""
 _HIGHLIGHT_JS = r"""
 ([sel, label]) => {
   try {
-    sessionStorage.setItem('agent_driving', '1');
-    sessionStorage.setItem('agent_step', label);
+    const hospital = location.pathname.match(/\/hospital\/apps\/([^/]+)/)?.[1] || 'legacy';
+    sessionStorage.setItem('agent_driving:' + hospital, '1');
+    sessionStorage.setItem('agent_step:' + hospital, label);
     window.dispatchEvent(new Event('agent-step'));
   } catch (e) {}
   const el = sel ? document.querySelector(sel) : null;
@@ -83,9 +84,10 @@ def hospital_relevant(text: str) -> bool:
     return bool(HOSPITAL_RE.search(text or ""))
 
 
-def hospital_base() -> str:
+def hospital_base(hospital_id=None) -> str:
     value = os.getenv("HOSPITAL_BASE", "http://127.0.0.1:8000/hospital/").strip()
-    return value.rstrip("/") + "/"
+    base = value.rstrip("/") + "/"
+    return base + "apps/" + hospital_id + "/" if hospital_id else base
 
 
 def booking_context(instruction: str) -> dict:
@@ -156,8 +158,9 @@ def _explicit_cancel(text: str) -> bool:
     return bool(re.search(r"(取消|停止|终止)", text))
 
 
-def _run_key(gid, user_id, instruction):
-    return "appt-" + hashlib.sha256(f"{gid}:{user_id}:{instruction}".encode()).hexdigest()[:16]
+def _run_key(gid, user_id, instruction, hospital_id=None):
+    identity = f"{gid}:{user_id}:{instruction}" + (f":{hospital_id}" if hospital_id else "")
+    return "appt-" + hashlib.sha256(identity.encode()).hexdigest()[:16]
 
 
 # ---------------- 浏览器会话（后台线程 + 同步 Playwright） ----------------
@@ -179,7 +182,7 @@ class _Session:
     def snapshot(self):
         return {"task_id": self.task_id, "status": self.status, "error": self.error,
                 "appointment": self.appointment, "details": self.details, "step": self.step,
-                "url": hospital_base()}
+                "url": hospital_base(self.context.get("hospital_id"))}
 
 
 class AppointmentManager:
@@ -231,7 +234,7 @@ class AppointmentManager:
 
     @staticmethod
     def _pause():
-        return max(3000, int(os.getenv("HOSPITAL_STEP_PAUSE", "3000")))
+        return 1500
 
     def _launch(self, pw):
         headless = os.getenv("HOSPITAL_HEADLESS", "").lower() in ("1", "true", "yes")
@@ -285,7 +288,7 @@ class AppointmentManager:
             _schedule(_care_booked(session.gid, session.run_key, session.appointment))
 
     def _click(self, page, locator, session):
-        delay = max(0, 3 - (time.monotonic() - getattr(session, "last_click", 0)))
+        delay = max(0, 1.5 - (time.monotonic() - getattr(session, "last_click", 0)))
         if delay:
             page.wait_for_timeout(int(delay * 1000) + 1)
         if session.stop.is_set():
@@ -314,7 +317,7 @@ class AppointmentManager:
         c = session.context
         dept = department_by_name(c["department"])
         doc, camp, pat = doctor(c["doctor_id"]), campus(c["campus_id"]), patient(c["patient_id"])
-        page.goto(hospital_base() + "appointment/departments", wait_until="domcontentloaded", timeout=15000)
+        page.goto(hospital_base(session.context.get("hospital_id")) + "appointment/departments", wait_until="domcontentloaded", timeout=15000)
         page.wait_for_selector('[data-testid^="dept-"]', timeout=15000)
         self._announce(page, "打开模拟医院 · 预约挂号", session)
         page.wait_for_timeout(self._pause())
@@ -328,8 +331,8 @@ class AppointmentManager:
         self._act(page, f"patient-{pat['id']}", f"选择就诊人：{pat['name']}", session)
         # 任务标识用于请求幂等。
         page.evaluate(
-            "([t, k]) => { sessionStorage.setItem('hospital_task_id', t); sessionStorage.setItem('hospital_token', k); }",
-            [session.task_id, "tk-" + uuid.uuid4().hex[:16]],
+            "([t, k, h]) => { sessionStorage.setItem('hospital_task_id:' + h, t); sessionStorage.setItem('hospital_token:' + h, k); }",
+            [session.task_id, "tk-" + uuid.uuid4().hex[:16], session.context.get("hospital_id") or "legacy"],
         )
         self._act(page, "patient-next", "下一步：核对预约信息", session)
         page.wait_for_url(re.compile(r"/appointment/confirm"), timeout=15000)
@@ -340,7 +343,7 @@ class AppointmentManager:
     def _fill_until_confirm(self, page, session):
         if session.context.get("slot_id"):
             return self._fill_targeted(page, session)
-        base = hospital_base()
+        base = hospital_base(session.context.get("hospital_id"))
         page.goto(base + "appointment/departments", wait_until="domcontentloaded", timeout=15000)
         page.wait_for_timeout(800)
         dept = session.context["department"]
@@ -359,8 +362,8 @@ class AppointmentManager:
         self._click(page, page.locator(f'button[aria-label="选择就诊人 {patient}"]'), session)
         # 保留任务标识，刷新后提交仍保持幂等。
         page.evaluate(
-            "([t, k]) => { sessionStorage.setItem('hospital_task_id', t); sessionStorage.setItem('hospital_token', k); }",
-            [session.task_id, "tk-" + uuid.uuid4().hex[:16]],
+            "([t, k, h]) => { sessionStorage.setItem('hospital_task_id:' + h, t); sessionStorage.setItem('hospital_token:' + h, k); }",
+            [session.task_id, "tk-" + uuid.uuid4().hex[:16], session.context.get("hospital_id") or "legacy"],
         )
         self._click(page, page.get_by_role("button", name="下一步"), session)
         page.wait_for_url(re.compile(r"/appointment/confirm"), timeout=15000)
@@ -592,7 +595,12 @@ async def hospital_simulator(ctx, args):
         source_text = _source_text(ctx)
         if source_text and not (re.search(r"(打开|访问|进入|看看|启动)", source_text) and hospital_relevant(source_text)):
             return {"error": "当前消息没有明确要求打开模拟医院"}
-        url = hospital_base()
+        hospital_id = args.get('hospital_id')
+        if hospital_id:
+            from .hospital_data import catalog
+            if not any(h['id'] == hospital_id for h in catalog()['hospitals']):
+                return {'error': '所选医院应用不存在'}
+        url = hospital_base(hospital_id)
         opened = await asyncio.to_thread(webbrowser.open, url, 2)
         return {"ok": True, "url": url, "opened": opened, "message": "模拟医院已打开"}
 
@@ -603,7 +611,14 @@ async def hospital_simulator(ctx, args):
         source_text = _source_text(ctx)
         if source_text and not _explicit_booking(source_text):
             return {"error": "当前消息没有明确要求预约或打开模拟医院"}
-        key = _run_key(ctx.group_id, ctx.user_id, instruction)
+        from . import hospital_data as H
+        selected_hospital = args.get('hospital_id') or next((h['id'] for h in H.catalog()['hospitals'] if h['name'] in instruction), None)
+        if not selected_hospital:
+            return {'status': 'awaiting_hospital_selection', 'hospitals': H.catalog()['hospitals'], 'message': '请先选择一家医院，再执行模拟挂号'}
+        if not any(h['id'] == selected_hospital for h in H.catalog()['hospitals']):
+            return {'error': '所选医院应用不存在'}
+        args = {**args, 'hospital_id': selected_hospital}
+        key = _run_key(ctx.group_id, ctx.user_id, instruction, args.get("hospital_id"))
         with DB() as db:
             existing = get(db, 'run', ctx.group_id, key)
         if existing:
@@ -640,6 +655,8 @@ async def hospital_simulator(ctx, args):
             chosen = candidates[0]
             context.update(slot_id=chosen['id'], campus_id=chosen['campusId'], doctor_id=chosen['doctorId'], date=chosen['date'], time=chosen['startTime'])
         chosen = H.slot(context['slot_id'])
+        if chosen and args.get('hospital_id') and chosen.get('hospitalId') != args['hospital_id']:
+            return {'error': '号源不属于所选医院，请重新查询'}
         if not chosen or chosen['status'] != 'available':
             return {'error': '指定号源已失效，请重新查询'}
         if not H.patient(context['patient_id']):
@@ -647,7 +664,7 @@ async def hospital_simulator(ctx, args):
         context.update(hospital_id=chosen.get('hospitalId'), campus_id=chosen['campusId'],
             doctor_id=chosen['doctorId'], date=chosen['date'], time=chosen['startTime'],
             department=H.department(chosen['departmentId'])['name'])
-        key = _run_key(ctx.group_id, ctx.user_id, instruction)
+        key = _run_key(ctx.group_id, ctx.user_id, instruction, args.get("hospital_id"))
         with DB() as db:
             run = get(db, "run", ctx.group_id, key)
             if not run:
@@ -735,6 +752,6 @@ register(Tool(
 
 REGISTRY["hospital_simulator"].instructions = (
     "query 只查询模拟号源；book 仅在用户明确要求办理时使用。先核对患者、科室和时间，"
-    "指定 slot_id 可精确办理。浏览器自动填写并锁号，不需要子女授权；支付由本人确认完成。"
+    "book 必须传用户选定的 hospital_id；缺少医院时先请用户选择，不能替用户选择。指定 slot_id 可精确办理。浏览器自动填写并锁号，不需要子女授权；支付由本人确认完成。"
     "用 status 查询结果，不得编造预约编号。"
 )

@@ -1,4 +1,5 @@
 import { Link, NavLink, Route, Routes, useNavigate } from 'react-router-dom';
+import { ACTIVE_HOSPITAL, HOSPITALS, HOSPITAL_NAME } from './data';
 import { Home, Stethoscope, CalendarCheck, FileText, Clock, Bell } from 'lucide-react';
 import { Breadcrumb, AgentBanner } from './components';
 import { HomePage } from './pages/HomePage';
@@ -18,6 +19,7 @@ const nav = [
 ];
 
 export default function App() {
+  if (!ACTIVE_HOSPITAL && !/\/hospital\/(pay|appointment\/result)\//.test(location.pathname)) return <HospitalLauncher />;
   return (
     <div className="min-h-screen flex flex-col" style={{ background: '#F6F8FB' }}>
       {/* 顶部导航 */}
@@ -28,7 +30,7 @@ export default function App() {
               <span className="text-lg font-bold text-white">+</span>
             </div>
             <div className="leading-tight">
-              <div className="font-semibold text-white" style={{ fontSize: 16 }}>附近两家医院</div>
+              <div className="font-semibold text-white" style={{ fontSize: 16 }}>{HOSPITAL_NAME}</div>
               <div className="text-white/70" style={{ fontSize: 11 }}>互联网预约服务平台</div>
             </div>
           </Link>
@@ -54,11 +56,12 @@ export default function App() {
         </div>
       </header>
 
+      <div className="bg-white text-right px-6 py-2 text-sm"><a href="/hospital/" style={{ color: '#176A9B' }}>切换医院应用</a></div>
       <AgentBanner />
 
       {/* 模拟平台提示条 */}
       <div className="text-center py-1.5 text-xs" style={{ background: '#FFF7E6', color: '#D69B32', borderBottom: '1px solid #F5E6C8' }}>
-        模拟演示平台 · 所有医院、医生、患者及号源均为虚构数据，仅用于产品演示
+        医院名称与地址来自高德 · 医生、患者、排班、费用及预约为模拟演示数据
       </div>
 
       <main className="flex-1">
@@ -82,7 +85,7 @@ export default function App() {
 
       {/* Footer */}
       <footer className="text-center py-6 text-xs" style={{ background: '#183B56', color: 'rgba(255,255,255,.4)' }}>
-        附近两家医院 · 互联网预约服务平台（模拟演示） · © 2026 · 医院基础信息来自高德 · 医生、号源和费用均为模拟
+        {HOSPITAL_NAME} · 互联网预约服务平台（模拟演示） · © 2026 · 医院基础信息来自高德 · 医生、号源和费用均为模拟
       </footer>
     </div>
   );
@@ -130,4 +133,23 @@ function GuidePage() {
       </div>
     </div>
   );
+}
+
+
+function HospitalLauncher() {
+  return <main className="min-h-screen px-6 py-12" style={{ background: '#F6F8FB' }}>
+    <div className="mx-auto" style={{ maxWidth: 1080 }}>
+      <h1 className="text-3xl font-semibold" style={{ color: '#183B56' }}>选择模拟医院</h1>
+      <p className="mt-3 text-sm" style={{ color: '#64748B' }}>选择一家医院进入独立预约应用，号源、预约记录和挂号草稿按医院分别保存。</p>
+      <div className="mt-8 grid gap-6 md:grid-cols-2">
+        {HOSPITALS.map((hospital, index) => <article key={hospital.id} className="h-card p-7">
+          <div className="text-sm mb-4" style={{ color: index ? '#218767' : '#176A9B' }}>医院应用 {index + 1} · {hospital.level}</div>
+          <h2 className="text-xl font-semibold" style={{ color: '#183B56' }}>{hospital.name}</h2>
+          <p className="mt-4 text-sm" style={{ color: '#64748B' }}>{hospital.address}</p>
+          <p className="mt-2 text-xs" style={{ color: '#64748B' }}>医院基础信息：高德地图 · 挂号为模拟演示</p>
+          <a data-testid={`hospital-app-${hospital.id}`} href={`/hospital/apps/${hospital.id}/`} className="h-btn-primary mt-6 inline-flex px-6 py-3">进入此医院</a>
+        </article>)}
+      </div>
+    </div>
+  </main>;
 }

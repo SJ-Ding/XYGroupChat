@@ -102,6 +102,12 @@ async def test_one_sentence_booking_ranks_options_with_rules_only(monkeypatch):
     a = make_agent()
     m = message('child', '@小艺 帮我妈挂明天上午的号')
     assert await care.on_message(a, 1, m) is True
+    assert not captured
+    selection = care_cards('hospital_apps')[-1]
+    assert len(selection['care']['data']['hospitals']) == 2
+    with DB() as db:
+        uid = db.query(User).filter_by(username='child').first().id
+    await care.act_on_card(a, selection['id'], 'choose_hospital', {'option': H.campus('c-main')['hospitalId']}, uid)
     assert not care_cards('hospital_options')
     assert captured['meta']['patient'] == 'mom'
     assert captured['meta']['department'] == '骨科'
@@ -123,8 +129,12 @@ async def test_model_fills_slots_when_rules_cannot(monkeypatch):
     a = make_agent(model)
     m = message('child', '@小艺 帮忙挂个号，最近头胀血压高')
     assert await care.on_message(a, 1, m) is True
+    selection = care_cards('hospital_apps')[-1]
+    with DB() as db:
+        uid = db.query(User).filter_by(username='child').first().id
+    await care.act_on_card(a, selection['id'], 'choose_hospital', {'option': H.campus('c-main')['hospitalId']}, uid)
     assert captured['patient'] == 'dad' and captured['department'] == '心血管内科'
-    assert any(s['kind'] == 'llm' for s in care.trace_list()[0]['steps'])
+    assert any(s['kind'] == 'llm' for turn in care.trace_list() for s in turn['steps'])
 
 
 @pytest.mark.asyncio

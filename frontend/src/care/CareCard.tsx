@@ -89,6 +89,18 @@ export function CareCard({ card, onUpdate }: { card: ChatCard; onUpdate: () => P
     );
   }
 
+  if (care.type === "hospital_apps") {
+    body = <>
+      <Head icon={<Hospital size={17} />} tone="blue" title="选择医院应用" />
+      <div className="cc-sub">为 {d.real_name} 预约 {d.department}，请选择办理医院。</div>
+      <div className="opt-list">{d.hospitals.map((h: D) => <div className="opt" key={h.id}>
+        <div className="opt-main"><b>{h.name}</b><p>{h.address}</p><small>独立模拟预约应用 · 医院信息来自高德{h.available === false && " · 暂无该科室"}</small></div>
+        {can("choose_hospital") && <Btn disabled={h.available === false} busy={busy === "choose_hospital:" + h.id} onClick={() => act("choose_hospital", { option: h.id })}>选择此医院</Btn>}
+      </div>)}</div>
+      {!open && <Result text={d.result} />}
+    </>;
+  }
+
   if (care.type === "hospital_options") {
     const chosen = d.chosen as string | undefined;
     body = (

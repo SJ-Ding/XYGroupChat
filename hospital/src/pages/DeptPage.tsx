@@ -13,7 +13,7 @@ export function DeptPage() {
   const layout = params.get('layout') === 'search' ? 'search' : 'grid';
   const [selectedCategory, setSelectedCategory] = useState('全部科室');
   const [search, setSearch] = useState('');
-  const [selectedCampus, setSelectedCampus] = useState<string>(getDraft().campusId || 'c-main');
+  const [selectedCampus, setSelectedCampus] = useState<string>(getDraft().campusId || CAMPUSES[0]?.id || '');
 
   // 从 URL ?dept=xxx 预选科室
   useEffect(() => {

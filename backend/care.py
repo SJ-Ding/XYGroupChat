@@ -478,7 +478,8 @@ async def build_options(login, dept_id, date, session, trace):
             alt = sorted(others, key=lambda s: (s['price'], s['startTime']))[0]
             available.append(option_from_slot(alt, dists[cid], visits, fam_doc, '费用更低的选择'))
     available.sort(key=lambda o: -o['score'])
-    available = available[:3]
+    first_per_hospital = list({o['hospital_id']: next(x for x in available if x['hospital_id'] == o['hospital_id']) for o in available}.values())
+    available = sorted((first_per_hospital + [o for o in available if o not in first_per_hospital])[:max(3, len(first_per_hospital))], key=lambda o: -o['score'])
     for i, o in enumerate(available):
         o['rank'] = i + 1
     # 比推荐项更近却没号的院区作为“对比项”，说明为什么没选它
@@ -655,14 +656,29 @@ async def handle_booking_request(agent, user_id, text_, *, source=None, speaker=
     profile = profile_of(patient)
     if profile:
         await trace.step('tool', f'medical_profile({real_name(patient)})', '；'.join(p['content'] for p in profile[:3]))
+    selected_hospital = (preset or {}).get('hospital_id')
+    if not selected_hospital:
+        selected_hospital = next((h['id'] for h in H.catalog()['hospitals'] if h['name'] in (text_ or '')), None)
+    if not query_only and not selected_hospital:
+        key = f"hospital-apps:{source or uuid.uuid4().hex}:{date}:{session}"
+        await post_card(key, 'hospital_apps', '选择医院应用', {
+            'patient': patient, 'real_name': real_name(patient), 'department': dept['name'],
+            'date': date, 'session': session, 'hospitals': [{**h, 'available': any(H.campus(cid).get('hospitalId') == h['id'] for cid in dept['campusIds'])} for h in H.catalog()['hospitals']]}, ['choose_hospital'])
+        return key
+    if selected_hospital and not any(H.campus(cid).get('hospitalId') == selected_hospital for cid in dept['campusIds']):
+        await say(f'所选医院暂未提供{dept["name"]}模拟门诊，请选择另一家医院或科室。', f'care:unsupported:{source}:{selected_hospital}')
+        return None
     options, compare, fam_doc = await build_options(patient, dept['id'], date, session, trace)
+    if selected_hospital:
+        options = [o for o in options if o.get('hospital_id') == selected_hospital]
+        compare = [o for o in compare if H.campus(o['campus_id']).get('hospitalId') == selected_hospital]
     if date not in H.window():
         await say('未来七天没有符合条件的号源，请换个时间。', f'care:no-slots:{source}')
         return None
     if not options:
         await say(f'{democlock.date_label(date)}{session_label(session)}{dept["name"]}都约满了，我再看看后一天的号。', f'care:full:{source}:{date}')
         return await handle_booking_request(agent, user_id, '', source=source, speaker=speaker, trace=trace,
-                                            preset={'patient': patient, 'department': dept['name'], 'date': democlock.shift_date(date, 1), 'session': session})
+                                            preset={'patient': patient, 'department': dept['name'], 'date': democlock.shift_date(date, 1), 'session': session, 'hospital_id': selected_hospital})
     top = options[0]
     meta = {'patient': patient, 'real_name': real_name(patient), 'patient_id': FAMILY[patient]['patient_id'], 'department': dept['name']}
     if query_only:
@@ -682,7 +698,7 @@ async def start_booking(agent, user_id, option, meta, *, origin_key, trace=None)
     patient_name = meta['real_name']
     args = {'action': 'book', 'instruction': f"为{patient_name}预约{option['campus']}{meta['department']}{option['doctor']}{option['date']} {option['time']}",
             'department': meta['department'], 'patient_name': patient_name, 'preferred_time': session_label(option['session']),
-            'slot_id': option['slot_id'], 'campus_id': option['campus_id'], 'doctor_id': option['doctor_id'],
+            'hospital_id': option.get('hospital_id') or H.campus(option['campus_id']).get('hospitalId'), 'slot_id': option['slot_id'], 'campus_id': option['campus_id'], 'doctor_id': option['doctor_id'],
             'date': option['date'], 'patient_id': meta['patient_id']}
     ctx = SkillContext(GID, user_id, f'care:{origin_key}', 0, False, grants=[], selected={'hospital_simulator'}, now=democlock.now())
     await say(f"好，我这就去模拟医院给{display(meta['patient'])}挂{option['doctor']}医生{option['date_label']}{option['time']}的号。"
@@ -720,7 +736,7 @@ async def on_booked(gid, run_key, appointment):
         'hospital_id': appt.get('hospitalId', 'legacy-hospital'), 'appt_id': appt['id'], 'patient': who, 'patient_name': appt['patientName'], 'campus': appt['campusName'],
         'department': appt['deptName'], 'doctor': appt['doctorName'], 'title': appt['doctorTitle'], 'date': appt['date'],
         'date_label': democlock.date_label(appt['date']), 'time': appt['startTime'], 'fee': appt['fee'],
-        'expires_at': appt['lock_expires'], 'pay_url': f"/hospital/pay/{appt['id']}?t={H.pay_token(appt['id'])}",
+        'expires_at': appt['lock_expires'], 'pay_url': f"/hospital/apps/{appt['hospitalId']}/pay/{appt['id']}?t={H.pay_token(appt['id'])}" if appt.get('hospitalId') else f"/hospital/pay/{appt['id']}?t={H.pay_token(appt['id'])}",
         'pay_status': 'unpaid'}, ['pay'])
     await trace.step('card', '推送支付卡', '支付只能本人在收银台点击完成；收银台成功后回调小艺')
 
@@ -1232,8 +1248,8 @@ def trace_list(limit=12):
 DEMO_STEPS = [
     {'key': 'hint', 'title': '妈妈说膝盖不舒服', 'actor': 'mom', 'desc': '妈妈在群里随口一句（没 @小艺），小艺结合病史和天气主动提醒小林',
      'say': ('mom', '今天阴天，膝盖又酸又胀，下楼都费劲……'), 'next': '在「小艺建议」卡上点「好的，帮挂号」，或者执行下一步'},
-    {'key': 'booking', 'title': '小林一句话挂号', 'actor': 'child', 'desc': '不说医院、不说科室，小艺用档案补全并给出排序后的号源',
-     'say': ('child', '@小艺 帮我妈挂明天上午的号'), 'next': '选号 → 浏览器自动填表 → 确认卡点「确认并继续」→ 去收银台支付'},
+    {'key': 'booking', 'title': '小林一句话挂号', 'actor': 'child', 'desc': '小艺用医疗档案补全科室，家人选择医院后自动在该院办理',
+     'say': ('child', '@小艺 帮我妈挂明天上午的号'), 'next': '选择医院应用 → 浏览器按1.5秒节奏自动挂号锁号 → 本人到该院收银台确认支付'},
     {'key': 'visit', 'title': '看完病 → 守护计划', 'actor': 'system', 'desc': '时钟拨到就诊当天，医院同步电子病历，小艺生成两周守护计划',
      'next': '在守护计划卡上点「确认计划」'},
     {'key': 'week', 'title': '快进 7 天 · 爸爸用药周报', 'actor': 'system', 'desc': '统计爸爸一周降压药打卡，发现漏服 2 次，提醒照护人',
@@ -1359,6 +1375,14 @@ async def act_on_card(agent, card_id, action, payload, user_id):
         trace = Trace('「小艺建议」→ 一句话挂号', card['message_id'])
         await handle_booking_request(agent, user_id, '', source=card['message_id'], speaker=who, trace=trace,
                                      preset={'patient': d['member'], 'department': d['department'], 'date': d['date'], 'session': d['session']})
+    elif ctype == 'hospital_apps':
+        hospital_id = (payload or {}).get('option')
+        hospital = next((h for h in d['hospitals'] if h['id'] == hospital_id), None)
+        if not hospital or hospital.get('available') is False:
+            raise HTTPException(422, '所选医院未提供该科室，请选择其他医院')
+        await update_card(card_id, status='done', data={'result': '已选择 ' + hospital['name']}, actions=[])
+        return await handle_booking_request(agent, user_id, '', source=card['message_id'], speaker=who,
+            preset={**{k: d[k] for k in ('patient', 'department', 'date', 'session')}, 'hospital_id': hospital_id})
     elif ctype == 'hospital_options':
         if action == 'next_day':
             await update_card(card_id, status='done', data={'result': '看看后一天'}, actions=[])

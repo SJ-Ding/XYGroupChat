@@ -312,18 +312,38 @@ class PayBody(BaseModel):
 router = APIRouter(prefix='/api/hospital', tags=['模拟医院'])
 
 
+def check_hospital(hospital_id, appt=None):
+    if not hospital_id:
+        return
+    if not any(h['id'] == hospital_id for h in catalog()['hospitals']):
+        raise HTTPException(404, '医院应用不存在')
+    if appt is not None and appt.get('hospitalId') != hospital_id:
+        raise HTTPException(404, '此医院中没有该预约')
+
+
 @router.get('/state')
-def state():
+def state(hospital_id: str | None = None):
+    check_hospital(hospital_id)
     with DB() as db:
-        rows = [public(a) for a in appointments(db)]
-    return {'today': democlock.today(), 'now': democlock.now(), 'hospital': catalog()['hospital'],
-            'campuses': catalog()['campuses'], 'hospitals': catalog().get('hospitals', []), 'slots': generate_slots(), 'appointments': rows}
+        rows = [public(a) for a in appointments(db) if not hospital_id or a.get('hospitalId') == hospital_id]
+    return {'today': democlock.today(), 'now': democlock.now(), 'hospital': ({**catalog()['hospital'], **next(h for h in catalog()['hospitals'] if h['id'] == hospital_id)} if hospital_id else catalog()['hospital']),
+            'campuses': [c for c in catalog()['campuses'] if not hospital_id or c.get('hospitalId') == hospital_id],
+            'hospitals': [h for h in catalog().get('hospitals', []) if not hospital_id or h['id'] == hospital_id],
+            'slots': [s for s in generate_slots() if not hospital_id or s.get('hospitalId') == hospital_id], 'appointments': rows}
 
 
 @router.post('/appointments')
-def book(body: BookBody):
+def book(body: BookBody, hospital_id: str | None = None):
+    check_hospital(hospital_id)
+    selected = slot(body.slotId)
+    if hospital_id and (not selected or selected.get('hospitalId') != hospital_id):
+        raise HTTPException(409, '号源不属于当前医院')
     with DB() as db:
         try:
+            if hospital_id and body.taskId:
+                previous = next((a for a in appointments(db) if a.get('taskId') == body.taskId and a.get('status') != 'cancelled'), None)
+                if previous:
+                    check_hospital(hospital_id, previous)
             appt = create_appointment(db, body.slotId, body.patientId, body.taskId, body.token)
         except ValueError as exc:
             raise HTTPException(409, str(exc))
@@ -332,20 +352,24 @@ def book(body: BookBody):
 
 
 @router.get('/appointments/{appt_id}')
-def detail(appt_id: str):
+def detail(appt_id: str, hospital_id: str | None = None):
+    check_hospital(hospital_id)
     with DB() as db:
         appt = get_appt(db, appt_id)
     if not appt:
         raise HTTPException(404, '预约不存在')
+    check_hospital(hospital_id, appt)
     return public(appt)
 
 
 @router.post('/appointments/{appt_id}/cancel')
-def cancel(appt_id: str):
+def cancel(appt_id: str, hospital_id: str | None = None):
+    check_hospital(hospital_id)
     with DB() as db:
         appt = get_appt(db, appt_id)
         if not appt:
             raise HTTPException(404, '预约不存在')
+        check_hospital(hospital_id, appt)
         if appt['status'] != 'confirmed':
             raise HTTPException(409, '当前状态不可取消')
         appt['status'] = 'cancelled'
@@ -355,14 +379,16 @@ def cancel(appt_id: str):
 
 
 @router.post('/appointments/{appt_id}/pay')
-async def pay(appt_id: str, body: PayBody):
+async def pay(appt_id: str, body: PayBody, hospital_id: str | None = None):
     """模拟收银台：支付只能由用户在收银台页面点击完成，小艺无法代付。"""
+    check_hospital(hospital_id)
     if not hmac.compare_digest(body.token, pay_token(appt_id)):
         raise HTTPException(403, '支付凭证无效')
     with DB() as db:
         appt = get_appt(db, appt_id)
         if not appt:
             raise HTTPException(404, '订单不存在')
+        check_hospital(hospital_id, appt)
         if appt['pay_status'] == 'paid':
             return public(appt)
         if appt['status'] != 'confirmed':
@@ -378,9 +404,17 @@ async def pay(appt_id: str, body: PayBody):
 
 
 @router.get('/appointments/{appt_id}/emr')
-def emr(appt_id: str):
+def emr(appt_id: str, hospital_id: str | None = None):
+    check_hospital(hospital_id)
     with DB() as db:
         appt = get_appt(db, appt_id)
     if not appt or not appt.get('emr'):
         raise HTTPException(404, '暂无病历')
+    check_hospital(hospital_id, appt)
     return appt['emr']
+
+
+# Each application has a scoped API; the legacy API stays available for old links.
+app_router = APIRouter(prefix='/api/hospital/apps/{hospital_id}', tags=['独立模拟医院'])
+for route in router.routes:
+    app_router.add_api_route(route.path.removeprefix('/api/hospital'), route.endpoint, methods=list(route.methods))

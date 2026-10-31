@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { CheckCircle2, Loader2, ChevronLeft, Info } from 'lucide-react';
-import { DEPARTMENTS, DOCTORS, CAMPUSES, PATIENTS, getDraft, saveDraft, submitAppointment, getSlotById } from '../data';
+import { DEPARTMENTS, DOCTORS, CAMPUSES, PATIENTS, appStorageKey, getDraft, saveDraft, submitAppointment, getSlotById } from '../data';
 import { Breadcrumb, StepBar } from '../components';
 
 const CATEGORY_LABEL: Record<string, string> = { general: '普通门诊', expert: '专家门诊', special: '特需门诊' };
@@ -37,8 +37,8 @@ export function ConfirmPage() {
     );
   }
 
-  const taskId = params.get('task_id') || sessionStorage.getItem('hospital_task_id') || '';
-  const token = params.get('token') || sessionStorage.getItem('hospital_token') || '';
+  const taskId = params.get('task_id') || sessionStorage.getItem(appStorageKey('hospital_task_id')) || '';
+  const token = params.get('token') || sessionStorage.getItem(appStorageKey('hospital_token')) || '';
 
   async function handleSubmit() {
     setError('');

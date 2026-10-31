@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Stethoscope, CalendarCheck, FileText, ClipboardList, ArrowRight, Clock, User, Info } from 'lucide-react';
-import { DEPARTMENTS } from '../data';
+import { DEPARTMENTS, HOSPITAL_NAME } from '../data';
 
 const HOT_DEPT_IDS = ['d-guke', 'd-xinneike', 'd-shenjing', 'd-yanke', 'd-kouqiang', 'd-puwai', 'd-pifuke', 'd-huxi'];
 const HOT_DEPTS = HOT_DEPT_IDS.map((id) => DEPARTMENTS.find((d) => d.id === id)!).filter(Boolean);
@@ -12,7 +12,7 @@ export function HomePage() {
       <section className="relative overflow-hidden" style={{ background: 'linear-gradient(135deg, #176A9B 0%, #145A84 100%)' }}>
         <div className="mx-auto px-6" style={{ maxWidth: 1280, minHeight: 300 }}>
           <div className="flex flex-col justify-center py-12" style={{ minHeight: 300 }}>
-            <h1 className="font-bold text-white" style={{ fontSize: 32 }}>附近两家医院</h1>
+            <h1 className="font-bold text-white" style={{ fontSize: 32 }}>{HOSPITAL_NAME}</h1>
             <p className="mt-2 text-white/80" style={{ fontSize: 18 }}>医院基础信息来自高德 · 挂号模拟演示</p>
             <p className="mt-4 text-white/60 text-sm leading-relaxed max-w-2xl">
               医生、号源、费用和预约均为模拟数据，不代表真实医院排班。预约开放时间：每日 8:00-17:00，可预约未来 7 天号源。

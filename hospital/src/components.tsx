@@ -1,3 +1,4 @@
+import { appStorageKey } from './data';
 import { useEffect, useState } from 'react';
 import { ChevronRight, Bot } from 'lucide-react';
 
@@ -6,7 +7,7 @@ import { ChevronRight, Bot } from 'lucide-react';
 export function AgentBanner() {
   const read = () => {
     try {
-      return { on: sessionStorage.getItem('agent_driving') === '1', step: sessionStorage.getItem('agent_step') || '' };
+      return { on: sessionStorage.getItem(appStorageKey('agent_driving')) === '1', step: sessionStorage.getItem(appStorageKey('agent_step')) || '' };
     } catch {
       return { on: false, step: '' };
     }
